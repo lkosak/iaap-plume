@@ -53,6 +53,18 @@ DISCLAIMER = (
 
 ENGINE_LABEL = "NOT HYSPLIT"
 ENGINE_NAME = "screening-lagrangian-ensemble"
+# The screening footprint keeps ENGINE_LABEL. These names are only for the
+# separate HYSPLIT layers.
+HYSPLIT_TRAJECTORY_LABEL = "HYSPLIT trajectories (real HYSPLIT, forecast met)"
+HYSPLIT_HINDCAST_LABEL = "post-event hindcast"
+HYSPLIT_HEIGHTS_M = (50, 250, 500)
+HYSPLIT_RELEASE_HOURS_CT = (10, 11, 12, 13, 14)
+# Public static build. The acknowledgement form is not stored here.
+HYSPLIT_TARBALL_URL = (
+    "https://www.ready.noaa.gov/data/web/models/hysplit4/linux_trial/"
+    "hysplit.v5.4.2_x86_64_public.tar.gz"
+)
+HYSPLIT_TARBALL_SHA1 = "1e2de556b5794749c950770218751ab863d9f2ce"
 ENGINE_SUMMARY = (
     "Relative footprints from a local Lagrangian ensemble driven by Open-Meteo wind "
     "profiles (NOAA HRRR, RRFS, and GFS, when each forecast covers the release window). "

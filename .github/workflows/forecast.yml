@@ -47,6 +47,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      - name: Install the public HYSPLIT build
+        run: bash scripts/install_hysplit.sh
+      - uses: actions/cache@v4
+        with:
+          path: data/arl
+          key: arl-forecast-${{ github.run_id }}
+          restore-keys: arl-forecast-
       - run: python -m pipeline.run_snapshot --out web/public/runs --honor-deadline
       - name: Commit the new archive entry
         run: |

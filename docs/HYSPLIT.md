@@ -1,6 +1,6 @@
 # Turning NOAA HYSPLIT on
 
-This repository does **not** run HYSPLIT for the maps it publishes. Every run is labeled `NOT HYSPLIT` and is produced by `pipeline/model.py`.
+The colored screening footprint is still labeled **NOT HYSPLIT**. A separate map layer, **HYSPLIT trajectories (real HYSPLIT, forecast met)**, is NOAA HYSPLIT when `hyts_std` from the public unregistered Linux build and an ARL forecast file are both available. Dispersion on forecast meteorology stays off. A **post-event hindcast** can run `hycs_std` on archived HRRR or NAM12 after Nov 23 and is stored as a percent of that run's peak, not as a concentration.
 
 ## Why it is off here
 

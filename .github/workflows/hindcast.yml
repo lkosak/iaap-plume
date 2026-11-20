@@ -1,0 +1,71 @@
+name: Post-event hindcast
+
+on:
+  schedule:
+    # 15:10 and 21:10 UTC on 24–26 Nov (9:10 AM and 3:10 PM CT).
+    # The command writes nothing until archived HRRR or NAM12 for the
+    # Nov 23 window is on the ARL server.
+    - cron: "10 15,21 24-26 11 *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: forecast-archive
+  cancel-in-progress: false
+
+jobs:
+  hindcast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Install the public HYSPLIT build
+        run: bash scripts/install_hysplit.sh
+      - uses: actions/cache@v4
+        with:
+          path: data/arl
+          key: arl-archive-${{ github.run_id }}
+          restore-keys: arl-archive-
+      - run: python -m pipeline.hindcast --out web/public/hindcast
+      - name: Commit the hindcast archive
+        run: |
+          git config user.name "forecast-bot"
+          git config user.email "forecast-bot@users.noreply.github.com"
+          git add web/public/hindcast
+          if git diff --cached --quiet; then
+            echo "No hindcast files."
+          else
+            git commit -m "Archive post-event HYSPLIT hindcast"
+            git push origin HEAD:main
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Build static export
+        working-directory: web
+        env:
+          NEXT_PUBLIC_BASE_PATH: /iaap-plume
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+  deploy:
+    needs: hindcast
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

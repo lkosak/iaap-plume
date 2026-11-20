@@ -1,0 +1,171 @@
+"""HYSPLIT trajectory ensemble on ARL forecast meteorology.
+
+The screening footprint is not modified. A missing executable or a forecast
+that does not cover Monday is recorded, and the snapshot still archives.
+"""
+
+from __future__ import annotations
+
+import shutil
+import tempfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from pipeline.arl import download, list_forecast, select_forecast
+from pipeline.config import (
+    EVENT_DATE,
+    HYSPLIT_HEIGHTS_M,
+    HYSPLIT_RELEASE_HOURS_CT,
+    HYSPLIT_TRAJECTORY_LABEL,
+    SIM_HOURS,
+    SOURCE_LAT,
+    SOURCE_LON,
+)
+from pipeline.hysplit import locate_executables, parse_tdump, run_executable, write_multi_trajectory_control
+from pipeline.timeutil import iso, stamp
+
+CHI = ZoneInfo("America/Chicago")
+
+
+def release_times() -> list[datetime]:
+    times = []
+    for hour in HYSPLIT_RELEASE_HOURS_CT:
+        local = datetime(EVENT_DATE.year, EVENT_DATE.month, EVENT_DATE.day, hour, tzinfo=CHI)
+        times.append(local.astimezone(timezone.utc))
+    return times
+
+
+def trajectory_window() -> tuple[datetime, datetime]:
+    times = release_times()
+    return times[0], times[-1] + timedelta(hours=SIM_HOURS)
+
+
+def empty_product(reason: str, skipped: list[dict] | None = None) -> dict:
+    return {
+        "label": HYSPLIT_TRAJECTORY_LABEL,
+        "real_hysplit": False,
+        "forecast_dispersion": False,
+        "note": (
+            "NOAA HYSPLIT trajectories were not produced for this archive entry. "
+            "The colored footprint is still the screening ensemble, labeled NOT HYSPLIT. "
+            + reason
+        ),
+        "reason": reason,
+        "met": None,
+        "skipped": skipped or [],
+        "trajectories": [],
+    }
+
+
+def build_trajectories(met_dir: Path | None = None, *, now: datetime | None = None) -> dict:
+    tools = locate_executables()
+    executable = tools.get("hyts_std")
+    if executable is None:
+        return empty_product("HYSPLIT_EXEC is not set, so hyts_std was not run.")
+    moment = now or datetime.now(timezone.utc)
+    days = [moment.date() - timedelta(days=offset) for offset in range(0, 3)]
+    need_start, need_end = trajectory_window()
+    try:
+        choice = select_forecast(list_forecast(days), need_start, need_end)
+    except Exception as exc:  # noqa: BLE001 — the screening run must still archive
+        return empty_product(str(exc))
+    directory = Path(met_dir or "data/arl")
+    local_files = []
+    try:
+        for item in choice.files:
+            local_files.append(download(item, directory))
+    except Exception as exc:  # noqa: BLE001
+        return empty_product(f"Could not download {choice.model} meteorology: {exc}", choice.skipped)
+    trajectories = []
+    errors = []
+    for when in release_times():
+        points = [(SOURCE_LAT, SOURCE_LON, float(height)) for height in HYSPLIT_HEIGHTS_M]
+        try:
+            parsed = _run_one(executable, when, points, local_files)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{stamp(when)}: {exc}")
+            continue
+        for height, track in zip(HYSPLIT_HEIGHTS_M, parsed):
+            trajectories.append(
+                {
+                    "height_m_agl": height,
+                    "release_utc": iso(when),
+                    "release_chicago": stamp(when),
+                    "points": track["points"],
+                }
+            )
+    if not trajectories:
+        return empty_product(
+            "hyts_std did not return trajectories. " + "; ".join(errors),
+            choice.skipped,
+        )
+    return {
+        "label": HYSPLIT_TRAJECTORY_LABEL,
+        "real_hysplit": True,
+        "forecast_dispersion": False,
+        "note": (
+            "These paths are NOAA HYSPLIT 3D trajectories on ARL forecast meteorology. "
+            "They are not concentrations and not measurements of lead. "
+            "The colored footprint on the other layers is a separate screening ensemble labeled NOT HYSPLIT. "
+            "The public unregistered build does not run dispersion on forecast meteorology."
+        ),
+        "reason": "",
+        "met": {
+            "model": choice.model,
+            "cycle": choice.cycle,
+            "files": [item.name for item in choice.files],
+            "urls": [item.url for item in choice.files],
+            "valid_start": choice.valid_start,
+            "valid_end": choice.valid_end,
+            "retrieved_at": iso(moment),
+            "source": "NOAA ARL forecast files (ftp://ftp.arl.noaa.gov/forecast/ via https://www.ready.noaa.gov/data/forecast/).",
+        },
+        "skipped": choice.skipped,
+        "trajectories": trajectories,
+        "errors": errors,
+    }
+
+
+def _job_directory(executable: Path) -> Path:
+    """HYSPLIT reads ``../bdyfiles`` from the working directory."""
+    root = executable.resolve().parent.parent
+    if not (root / "bdyfiles").is_dir():
+        raise RuntimeError(f"HYSPLIT bdyfiles directory is missing next to {executable}")
+    return Path(tempfile.mkdtemp(prefix="job-", dir=root))
+
+
+def _run_one(executable: Path, when: datetime, points, local_files: list[Path]) -> list[dict]:
+    work = _job_directory(executable)
+    try:
+        return _run_in(executable, work, when, points, local_files)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _run_in(executable: Path, work: Path, when: datetime, points, local_files: list[Path]) -> list[dict]:
+        met_dir = work / "met"
+        met_dir.mkdir()
+        names = []
+        for item in local_files:
+            destination = met_dir / item.name
+            destination.symlink_to(item.resolve())
+            names.append(item.name)
+        write_multi_trajectory_control(
+            work / "CONTROL",
+            when=when,
+            points=points,
+            hours=SIM_HOURS,
+            met_dir=str(met_dir),
+            met_files=names,
+        )
+        (work / "SETUP.CFG").write_text("&SETUP\ntratio = 0.75,\n/\n")
+        completed = run_executable(executable, work, timeout=900)
+        tdump = work / "tdump"
+        if not tdump.exists():
+            excerpt = f"{completed.stdout}\n{completed.stderr}"[-500:]
+            raise RuntimeError(f"hyts_std exit {completed.returncode}: {excerpt}")
+        parsed = parse_tdump(tdump.read_text(errors="replace"))
+        if len(parsed) < len(points):
+            raise RuntimeError(f"expected {len(points)} trajectories, parsed {len(parsed)}")
+        return parsed

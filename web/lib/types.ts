@@ -1,4 +1,50 @@
-export type LayerName = "air" | "deposition" | "arrival";
+export type LayerName = "air" | "deposition" | "arrival" | "hysplit" | "hindcast";
+
+export type TrajectoryPoint = { time: string; lat: number; lon: number; height_m: number; age_h?: number };
+
+export type HysplitTrajectories = {
+  label: string;
+  real_hysplit: boolean;
+  note?: string;
+  reason?: string;
+  met?: {
+    model: string;
+    cycle: string;
+    files: string[];
+    valid_start?: string;
+    valid_end?: string;
+    retrieved_at?: string;
+  } | null;
+  skipped?: { model: string; cycle?: string; reason: string }[];
+  trajectories?: {
+    height_m_agl: number;
+    release_utc: string;
+    release_chicago: string;
+    points: TrajectoryPoint[];
+  }[];
+};
+
+export type Hindcast = {
+  label: string;
+  real_hysplit: boolean;
+  generated_at_chicago?: string;
+  note?: string;
+  reason?: string;
+  met?: { model: string; cycle: string; files: string[]; valid_start?: string; valid_end?: string } | null;
+  grid?: {
+    lat_min: number;
+    lon_min: number;
+    lat_max: number;
+    lon_max: number;
+    dlat: number;
+    dlon: number;
+    nlat: number;
+    nlon: number;
+    relative_air: string;
+    relative_deposition: string;
+    scale?: string;
+  };
+};
 
 export type OfficialSource = {
   id: string;
@@ -106,6 +152,7 @@ export type Run = {
     no_arrival: number;
     n_members: number;
   };
+  hysplit?: HysplitTrajectories;
   official: {
     retrieved_at_chicago?: string;
     preface?: string;

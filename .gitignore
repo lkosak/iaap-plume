@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .venv/
 data/met_cache/
+data/arl/
+data/hysplit/
 web/node_modules/
 web/.next/
 web/out/

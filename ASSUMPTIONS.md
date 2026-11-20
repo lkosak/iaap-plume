@@ -2,7 +2,7 @@
 
 Every number below is an assumption of this screening ensemble. None of them is a measured property of the detonation, and none of them is a concentration.
 
-The engine label on every run is **NOT HYSPLIT** unless a future archive explicitly says otherwise. This version does not run NOAA HYSPLIT.
+The colored footprint on every run is **NOT HYSPLIT**. When the trajectory layer is present it is labeled HYSPLIT trajectories (real HYSPLIT, forecast met) and is a separate NOAA HYSPLIT calculation. It is not a concentration.
 
 ## Place
 

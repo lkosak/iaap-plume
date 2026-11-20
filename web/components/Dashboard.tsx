@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapView } from "@/components/MapView";
 import { publicPath } from "@/lib/publicPath";
-import type { CellReadout, LayerName, Run, RunIndex } from "@/lib/types";
+import type { CellReadout, Hindcast, LayerName, Run, RunIndex } from "@/lib/types";
 
 const LAYERS: { id: LayerName; label: string }[] = [
   { id: "air", label: "Air overlap" },
   { id: "deposition", label: "Deposition overlap" },
   { id: "arrival", label: "First arrival" },
+  { id: "hysplit", label: "HYSPLIT trajectories (real HYSPLIT, forecast met)" },
+  { id: "hindcast", label: "post-event hindcast" },
 ];
 
 export function Dashboard() {
@@ -20,22 +22,27 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [layer, setLayer] = useState<LayerName>("air");
+  const [hindcast, setHindcast] = useState<Hindcast | null>(null);
+  const [hindcastField, setHindcastField] = useState<"air" | "deposition">("air");
   const [picked, setPicked] = useState<CellReadout | null>(null);
 
   useEffect(() => {
     let stop = false;
     async function load() {
       try {
-        const [latestRes, indexRes] = await Promise.all([
+        const [latestRes, indexRes, hindcastRes] = await Promise.all([
           fetch(publicPath("/runs/latest.json"), { cache: "no-store" }),
           fetch(publicPath("/runs/index.json"), { cache: "no-store" }),
+          fetch(publicPath("/hindcast/latest.json"), { cache: "no-store" }),
         ]);
         if (!latestRes.ok) throw new Error(`No archived run yet (HTTP ${latestRes.status}).`);
         const latest = (await latestRes.json()) as Run;
         const listing = indexRes.ok ? ((await indexRes.json()) as RunIndex) : null;
+        const hindcastBody = hindcastRes.ok ? ((await hindcastRes.json()) as Hindcast) : null;
         if (!stop) {
           setRun(latest);
           setIndex(listing);
+          setHindcast(hindcastBody);
           setError(null);
         }
       } catch (err) {
@@ -109,15 +116,22 @@ export function Dashboard() {
                 </Button>
               ))}
             </div>
-            <MapView run={run} layer={layer} onPick={setPicked} />
-            <Legend layer={layer} members={run.ensemble.n_members} />
-            {picked ? <CellCard run={run} cell={picked} /> : (
+            <MapView run={run} layer={layer} hindcast={hindcast} hindcastField={hindcastField} onPick={setPicked} />
+            <Legend layer={layer} members={run.ensemble.n_members} hindcastField={hindcastField} />
+            {layer === "hindcast" ? (
+              <div className="flex gap-2 px-3 py-2">
+                <Button size="sm" variant={hindcastField === "air" ? "default" : "outline"} onClick={() => setHindcastField("air")}>Hindcast air</Button>
+                <Button size="sm" variant={hindcastField === "deposition" ? "default" : "outline"} onClick={() => setHindcastField("deposition")}>Hindcast deposition</Button>
+              </div>
+            ) : null}
+            {picked ? <CellCard run={run} cell={picked} layer={layer} hindcastField={hindcastField} /> : (
               <p className="px-3 py-2 text-xs text-[#5c564e]">Tap the map to read one cell. Counts are ensemble members, not a measurement.</p>
             )}
           </div>
 
           <div className="flex flex-col gap-3">
             <StatusChips run={run} />
+            <TrajectoryCard run={run} />
             <FairfieldCard run={run} />
             <Card>
               <CardHeader>
@@ -181,7 +195,44 @@ function StatusChips({ run }: { run: Run }) {
       <Badge>Forecast retrieved {run.forecast.retrieved_at_chicago ?? "unknown"}</Badge>
       <Badge>{run.engine.label}</Badge>
       <Badge className="normal-case tracking-normal">{models}</Badge>
+      {run.hysplit?.real_hysplit ? (
+        <Badge className="normal-case tracking-normal">
+          {run.hysplit.label}. {run.hysplit.met?.model} cycle {run.hysplit.met?.cycle}.
+        </Badge>
+      ) : null}
     </div>
+  );
+}
+
+function TrajectoryCard({ run }: { run: Run }) {
+  const hysplit = run.hysplit;
+  if (!hysplit) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{hysplit.label}</CardTitle>
+      </CardHeader>
+      <CardContent className="text-sm leading-relaxed">
+        <p>{hysplit.note}</p>
+        {hysplit.met ? (
+          <p className="mt-2">
+            Met {hysplit.met.model} cycle {hysplit.met.cycle}. Valid {hysplit.met.valid_start} to {hysplit.met.valid_end}. Files: {hysplit.met.files.join(", ")}.
+          </p>
+        ) : null}
+        {hysplit.real_hysplit ? (
+          <p className="mt-2">{hysplit.trajectories?.length ?? 0} trajectories from 50, 250, and 500 m AGL across 10:00 AM–2:00 PM CT.</p>
+        ) : (
+          <p className="mt-2">{hysplit.reason}</p>
+        )}
+        {hysplit.skipped?.length ? (
+          <ul className="mt-2 text-xs text-[#5c564e]">
+            {hysplit.skipped.map((item) => (
+              <li key={`${item.model}-${item.cycle}`}>Skipped {item.model} {item.cycle}: {item.reason}</li>
+            ))}
+          </ul>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -221,9 +272,13 @@ function FairfieldCard({ run }: { run: Run }) {
   );
 }
 
-function Legend({ layer, members }: { layer: LayerName; members: number }) {
+function Legend({ layer, members, hindcastField }: { layer: LayerName; members: number; hindcastField: "air" | "deposition" }) {
   const label =
-    layer === "deposition"
+    layer === "hysplit"
+      ? "Lines are HYSPLIT trajectories (real HYSPLIT, forecast met). The faint cells are the separate NOT HYSPLIT screening footprint."
+      : layer === "hindcast"
+        ? `post-event hindcast, ${hindcastField === "deposition" ? "deposition" : "air"} field, as a percent of this run's peak. Not a concentration.`
+      : layer === "deposition"
       ? "Share of members that deposited a particle in the cell"
       : layer === "arrival"
         ? "Earliest first-arrival among members that reach the cell. Darker is later."
@@ -236,8 +291,17 @@ function Legend({ layer, members }: { layer: LayerName; members: number }) {
   );
 }
 
-function CellCard({ run, cell }: { run: Run; cell: CellReadout }) {
+function CellCard({ run, cell, layer, hindcastField }: { run: Run; cell: CellReadout; layer: LayerName; hindcastField: "air" | "deposition" }) {
   const none = run.grid.no_arrival;
+  if (layer === "hindcast") {
+    return (
+      <div className="border-t border-[#1c1915]/10 px-3 py-2 text-sm">
+        <p className="font-semibold">Cell near {cell.lat.toFixed(2)}°, {cell.lon.toFixed(2)}°</p>
+        <p>post-event hindcast {hindcastField} field: {hindcastField === "deposition" ? cell.depPct : cell.airPct} percent of this run&apos;s peak.</p>
+        <p className="text-xs text-[#5c564e]">Not a concentration. Not a measurement of lead. Release mass is unknown.</p>
+      </div>
+    );
+  }
   return (
     <div className="border-t border-[#1c1915]/10 px-3 py-2 text-sm">
       <p className="font-semibold">Cell near {cell.lat.toFixed(2)}°, {cell.lon.toFixed(2)}°</p>
