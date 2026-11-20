@@ -95,7 +95,7 @@ export function Climatology() {
             Within ±45°: {level.full_window_45_pct_of_days}%.
           </li>
           <li>
-            At 100 m the toward-Fairfield shares are {data.era5_100m.toward_fairfield_22_5_pct}% (±22.5°) and {data.era5_100m.toward_fairfield_45_pct}% (±45°).
+            At 100 m the toward-Fairfield shares are {data.era5_100m.toward_fairfield_22_5_pct.toFixed(1)}% (±22.5°) and {data.era5_100m.toward_fairfield_45_pct.toFixed(1)}% (±45°).
           </li>
           <li>
             Burlington airport (KBRL) observations over the same dates and hours: {data.kbrl.toward_fairfield_22_5_pct}% within ±22.5° and {data.kbrl.toward_fairfield_45_pct}% within ±45°, from {data.kbrl.n_hours} reports.

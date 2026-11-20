@@ -113,6 +113,15 @@ def test_ensemble_workflow_does_not_download_hysplit_met():
     text = Path(__file__).resolve().parents[1].joinpath(".github/workflows/forecast.yml").read_text()
     assert 'SKIP_HYSPLIT: "1"' in text
     assert "install_hysplit.sh" not in text
+    assert "git pull --rebase origin main" in text
+
+
+def test_trajectory_job_publishes_its_own_file():
+    text = Path(__file__).resolve().parents[1].joinpath(".github/workflows/hysplit.yml").read_text()
+    assert "web/public/hysplit/latest.json" in text
+    assert "web/public/runs" not in text
+    assert "concurrency:" in text
+    assert "hysplit-trajectories" in text
 
 
 def test_forecast_workflow_bounds_a_hung_snapshot():

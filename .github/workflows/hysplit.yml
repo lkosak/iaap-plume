@@ -2,8 +2,8 @@ name: HYSPLIT trajectories
 
 on:
   schedule:
-    # 30 minutes after the ensemble archive, so this job updates the run
-    # the ensemble just published instead of racing its commit.
+    # 30 minutes after the ensemble archive. This job publishes
+    # web/public/hysplit/latest.json and does not edit the ensemble archive.
     - cron: "40 */2 * * *"
   workflow_dispatch:
   push:
@@ -44,24 +44,19 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: python -u -m pipeline.hysplit_forecast --compute data/hysplit/product.json --met-dir data/arl
-      - name: Attach trajectories to the newest archive entry
+      - name: Publish the trajectory layer
         timeout-minutes: 3
         run: |
           git config user.name "forecast-bot"
           git config user.email "forecast-bot@users.noreply.github.com"
-          git pull --rebase origin main
-          python -u -m pipeline.hysplit_forecast --attach data/hysplit/product.json --out web/public/runs
-          git add web/public/runs
+          mkdir -p web/public/hysplit
+          cp data/hysplit/product.json web/public/hysplit/latest.json
+          git add web/public/hysplit/latest.json
           if git diff --cached --quiet; then
             echo "No trajectory update."
           else
-            git commit -m "Attach HYSPLIT trajectories"
+            git commit -m "Publish HYSPLIT trajectories"
             git pull --rebase origin main
-            python -u -m pipeline.hysplit_forecast --attach data/hysplit/product.json --out web/public/runs
-            git add web/public/runs
-            if ! git diff --cached --quiet; then
-              git commit -m "Attach HYSPLIT trajectories to the newest run"
-            fi
             git push origin HEAD:main
           fi
       - uses: actions/setup-node@v4

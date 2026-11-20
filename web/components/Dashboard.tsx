@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Climatology } from "@/components/Climatology";
 import { MapView } from "@/components/MapView";
 import { publicPath } from "@/lib/publicPath";
-import type { CellReadout, Hindcast, LayerName, Run, RunIndex } from "@/lib/types";
+import type { CellReadout, Hindcast, HysplitTrajectories, LayerName, Run, RunIndex } from "@/lib/types";
 
 const LAYERS: { id: LayerName; label: string }[] = [
   { id: "air", label: "Air overlap" },
@@ -24,6 +24,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [layer, setLayer] = useState<LayerName>("air");
   const [hindcast, setHindcast] = useState<Hindcast | null>(null);
+  const [trajectoryFile, setTrajectoryFile] = useState<HysplitTrajectories | null>(null);
   const [hindcastField, setHindcastField] = useState<"air" | "deposition">("air");
   const [picked, setPicked] = useState<CellReadout | null>(null);
 
@@ -31,19 +32,22 @@ export function Dashboard() {
     let stop = false;
     async function load() {
       try {
-        const [latestRes, indexRes, hindcastRes] = await Promise.all([
+        const [latestRes, indexRes, hindcastRes, trajectoryRes] = await Promise.all([
           fetch(publicPath("/runs/latest.json"), { cache: "no-store" }),
           fetch(publicPath("/runs/index.json"), { cache: "no-store" }),
           fetch(publicPath("/hindcast/latest.json"), { cache: "no-store" }),
+          fetch(publicPath("/hysplit/latest.json"), { cache: "no-store" }),
         ]);
         if (!latestRes.ok) throw new Error(`No archived run yet (HTTP ${latestRes.status}).`);
         const latest = (await latestRes.json()) as Run;
         const listing = indexRes.ok ? ((await indexRes.json()) as RunIndex) : null;
         const hindcastBody = hindcastRes.ok ? ((await hindcastRes.json()) as Hindcast) : null;
+        const trajectoryBody = trajectoryRes.ok ? ((await trajectoryRes.json()) as HysplitTrajectories) : null;
         if (!stop) {
           setRun(latest);
           setIndex(listing);
           setHindcast(hindcastBody);
+          setTrajectoryFile(trajectoryBody);
           setError(null);
         }
       } catch (err) {
@@ -66,6 +70,13 @@ export function Dashboard() {
     setRun((await res.json()) as Run);
     setPicked(null);
   }
+
+  const showingLatest = !index || !run || index.latest_id === run.run_id;
+  const hysplit =
+    showingLatest && trajectoryFile && (trajectoryFile.real_hysplit || !run?.hysplit?.real_hysplit)
+      ? trajectoryFile
+      : run?.hysplit;
+  const displayRun = run && hysplit ? { ...run, hysplit } : run;
 
   return (
     <main className="mx-auto min-h-dvh max-w-6xl px-3 py-4 md:px-6 md:py-6">
@@ -101,7 +112,7 @@ export function Dashboard() {
         </Card>
       ) : null}
 
-      {run ? (
+      {displayRun ? (
         <div className="grid gap-3 md:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.8fr)] md:items-start">
           <div className="overflow-hidden rounded-2xl border border-[#1c1915]/10 bg-white">
             <div className="flex flex-wrap gap-2 px-3 py-2">
@@ -117,30 +128,30 @@ export function Dashboard() {
                 </Button>
               ))}
             </div>
-            <MapView run={run} layer={layer} hindcast={hindcast} hindcastField={hindcastField} onPick={setPicked} />
-            <Legend layer={layer} members={run.ensemble.n_members} hindcastField={hindcastField} />
+            <MapView run={displayRun} layer={layer} hindcast={hindcast} hindcastField={hindcastField} onPick={setPicked} />
+            <Legend layer={layer} members={displayRun.ensemble.n_members} hindcastField={hindcastField} />
             {layer === "hindcast" ? (
               <div className="flex gap-2 px-3 py-2">
                 <Button size="sm" variant={hindcastField === "air" ? "default" : "outline"} onClick={() => setHindcastField("air")}>Hindcast air</Button>
                 <Button size="sm" variant={hindcastField === "deposition" ? "default" : "outline"} onClick={() => setHindcastField("deposition")}>Hindcast deposition</Button>
               </div>
             ) : null}
-            {picked ? <CellCard run={run} cell={picked} layer={layer} hindcastField={hindcastField} /> : (
+            {picked ? <CellCard run={displayRun} cell={picked} layer={layer} hindcastField={hindcastField} /> : (
               <p className="px-3 py-2 text-xs text-[#5c564e]">Tap the map to read one cell. Counts are ensemble members, not a measurement.</p>
             )}
           </div>
 
           <div className="flex flex-col gap-3">
-            <StatusChips run={run} />
-            <TrajectoryCard run={run} />
-            <FairfieldCard run={run} />
+            <StatusChips run={displayRun} />
+            <TrajectoryCard run={displayRun} />
+            <FairfieldCard run={displayRun} />
             <Card>
               <CardHeader>
                 <CardTitle>This run</CardTitle>
               </CardHeader>
               <CardContent className="text-sm leading-relaxed text-[#1c1915]">
-                <p>{run.narrative}</p>
-                <p className="mt-2 text-[#5c564e]">{run.engine.summary}</p>
+                <p>{displayRun.narrative}</p>
+                <p className="mt-2 text-[#5c564e]">{displayRun.engine.summary}</p>
               </CardContent>
             </Card>
           </div>
@@ -152,7 +163,7 @@ export function Dashboard() {
       {run ? (
         <>
           <History index={index} active={run.run_id} onOpen={openRun} />
-          <Uncertainty run={run} />
+          <Uncertainty run={displayRun ?? run} />
           <Official run={run} />
           <Limits />
         </>
