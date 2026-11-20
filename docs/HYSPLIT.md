@@ -4,7 +4,7 @@ The colored screening footprint is still labeled **NOT HYSPLIT**. A separate map
 
 ## Why it is off here
 
-1. The public Linux download page, [HYSPLIT for Linux — unregistered](https://www.ready.noaa.gov/HYSPLIT_linuxtrial.php), requires an email acknowledgement of the [use agreement](https://www.ready.noaa.gov/HYSPLIT_agreement.php). There is no direct tarball link to fetch without that step. This environment did not submit an email.
+1. The public Linux download page, [HYSPLIT for Linux — unregistered](https://www.ready.noaa.gov/HYSPLIT_linuxtrial.php), requires an email acknowledgement of the [use agreement](https://www.ready.noaa.gov/HYSPLIT_agreement.php). That acknowledgement was submitted. The address is not stored in this repository and is not shown on the dashboard. The install script downloads NOAA's published static tarball.
 2. NOAA states that the unregistered build is the same as the registered build **except that dispersion will not run on forecast meteorological fields**. A Monday forecast product needs forecast fields (HRRR, RRFS, or GFS). The unregistered binary cannot produce that product.
 3. The registered Linux build is issued after [registration](https://www.ready.noaa.gov/HYSPLIT_register.php), from [HYSPLIT for LINUX](https://www.ready.noaa.gov/HYSPLIT_linux.php). Source access, if a prebuilt binary does not match the OS, is a separate request to `arl.webmaster@noaa.gov` and is not guaranteed.
 4. `HYSPLIT_EXEC` was not set in this environment. `pipeline/hysplit.py` checks that variable on every snapshot and stores the result under `engine.hysplit_check`. `engine.is_hysplit` stays false.
