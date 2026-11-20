@@ -1,10 +1,6 @@
 name: Forecast archive
 
 on:
-  # Temporary: this push starts one forecast. The following commit removes it
-  # so later code pushes do not race the Pages workflow.
-  push:
-    branches: [main]
   schedule:
     # Every two hours. The snapshot itself stops after 24 Nov 2026 CT
     # (2026-11-25 06:00 UTC). Newest HRRR and RRFS cycles are requested on
