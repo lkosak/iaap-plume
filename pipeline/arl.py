@@ -34,6 +34,9 @@ _SPLIT = (
     (re.compile(r"^hysplit\.t(\d{2})z\.hrrrf18$"), "HRRR", 18, 18),
     (re.compile(r"^hysplit\.t(\d{2})z\.namf$"), "NAM", 0, 84),
     (re.compile(r"^hysplit\.t(\d{2})z\.namsf$"), "NAM", 0, 48),
+    (re.compile(r"^hysplit\.t(\d{2})z\.nam12$"), "NAM", 0, 48),
+    # 1-degree GFS, about 1.4 GB and long enough to cover Monday.
+    # The 0.25-degree files are several GB each, so they are not the fallback.
     (re.compile(r"^hysplit\.t(\d{2})z\.gfsf$"), "GFS", 0, 240),
 )
 _HRRR_CHUNK = re.compile(r"^(\d{8})_(\d{2})-(\d{2})_hrrr$")
@@ -59,14 +62,8 @@ class MetChoice:
 
 
 def enforce_met_cap(content_length: int | None, name: str) -> None:
-    """Refuse a meteorology file that is larger than the schedule can carry."""
-    if content_length is None:
-        return
-    if content_length > MAX_MET_BYTES:
-        raise RuntimeError(
-            f"{name} is {content_length} bytes, over the {MAX_MET_BYTES} byte cap. "
-            "HYSPLIT met was skipped so the screening ensemble can still publish."
-        )
+    """Refuse a meteorology file that is larger than the ensemble job can carry."""
+    enforce_met_cap_limit(content_length, name, MAX_MET_BYTES)
 
 
 def _get(url: str, timeout: int = 25) -> bytes:
@@ -110,8 +107,14 @@ def _iso(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def select_forecast(files: list[RemoteFile], need_start: datetime, need_end: datetime) -> MetChoice:
-    """Pick the newest HRRR cycle that covers the window, else NAM, else GFS."""
+def select_forecast(
+    files: list[RemoteFile],
+    need_start: datetime,
+    need_end: datetime,
+    *,
+    priority: tuple[str, ...] = _PRIORITY,
+) -> MetChoice:
+    """Pick the newest cycle of the first listed model that covers the window."""
     if need_end < need_start:
         raise ValueError("need_end is before need_start")
     grouped: dict[tuple[str, datetime], list[tuple[RemoteFile, int, int]]] = {}
@@ -125,7 +128,7 @@ def select_forecast(files: list[RemoteFile], need_start: datetime, need_end: dat
             break
 
     skipped: list[dict] = []
-    for model in _PRIORITY:
+    for model in priority:
         cycles = sorted((cycle for (name, cycle) in grouped if name == model), reverse=True)
         if not cycles:
             skipped.append({"model": model, "cycle": "", "reason": f"no {model} forecast file was listed"})
@@ -266,40 +269,78 @@ def list_archive_names() -> list[str]:
     return names
 
 
-def download(item: RemoteFile, directory: Path) -> Path:
+def download(
+    item: RemoteFile,
+    directory: Path,
+    *,
+    max_bytes: int = MAX_MET_BYTES,
+    deadline_seconds: int = DOWNLOAD_DEADLINE_SECONDS,
+) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     dest = directory / item.name
-    if dest.exists() and dest.stat().st_size > MAX_MET_BYTES:
+    if dest.exists() and dest.stat().st_size > max_bytes:
         dest.unlink()
-    if dest.exists() and dest.stat().st_size > 0:
-        print(f"arl reuse {dest} ({dest.stat().st_size} bytes)", flush=True)
+    announced = _remote_length(item.url)
+    enforce_met_cap_limit(announced, item.name, max_bytes)
+    if dest.exists() and announced is not None and dest.stat().st_size == announced:
+        print(f"arl reuse {dest.name} ({dest.stat().st_size} bytes)", flush=True)
+        return dest
+    if dest.exists() and announced is None and dest.stat().st_size > 0:
+        print(f"arl reuse {dest.name} ({dest.stat().st_size} bytes)", flush=True)
         return dest
     print(f"arl download {item.url}", flush=True)
     request = Request(item.url, headers={"User-Agent": USER_AGENT})
     temporary = dest.with_suffix(dest.suffix + ".partial")
     started = time.monotonic()
+    next_log = 32 * 1024 * 1024
     try:
         with urlopen(request, timeout=READ_TIMEOUT_SECONDS) as response, temporary.open("wb") as handle:
-            enforce_met_cap(_content_length(response.headers.get("Content-Length")), item.name)
+            enforce_met_cap_limit(_content_length(response.headers.get("Content-Length")), item.name, max_bytes)
             written = 0
             while True:
-                if time.monotonic() - started > DOWNLOAD_DEADLINE_SECONDS:
+                if time.monotonic() - started > deadline_seconds:
                     raise RuntimeError(
-                        f"{item.name} download exceeded {DOWNLOAD_DEADLINE_SECONDS}s "
-                        f"after {written} bytes. HYSPLIT met was skipped."
+                        f"{item.name} download exceeded {deadline_seconds}s after {written} bytes."
                     )
                 chunk = response.read(256 * 1024)
                 if not chunk:
                     break
                 written += len(chunk)
-                enforce_met_cap(written, item.name)
+                enforce_met_cap_limit(written, item.name, max_bytes)
                 handle.write(chunk)
+                if written >= next_log:
+                    print(
+                        f"arl {item.name}: {written / 1_000_000:.0f} MB "
+                        f"in {time.monotonic() - started:.0f}s",
+                        flush=True,
+                    )
+                    next_log += 32 * 1024 * 1024
     except Exception:
         temporary.unlink(missing_ok=True)
         raise
     temporary.replace(dest)
-    print(f"arl saved {dest} ({dest.stat().st_size} bytes)", flush=True)
+    print(f"arl saved {dest.name} ({dest.stat().st_size} bytes)", flush=True)
     return dest
+
+
+def enforce_met_cap_limit(content_length: int | None, name: str, max_bytes: int) -> None:
+    if content_length is None:
+        return
+    if content_length > max_bytes:
+        raise RuntimeError(
+            f"{name} is {content_length} bytes, over the {max_bytes} byte cap. "
+            "HYSPLIT met was skipped so the screening ensemble can still publish."
+        )
+
+
+def _remote_length(url: str) -> int | None:
+    request = Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
+    try:
+        with urlopen(request, timeout=READ_TIMEOUT_SECONDS) as response:
+            return _content_length(response.headers.get("Content-Length"))
+    except Exception as exc:  # noqa: BLE001 — a missing HEAD still allows a bounded GET
+        print(f"arl HEAD {url}: {exc}", flush=True)
+        return None
 
 
 def _content_length(value: str | None) -> int | None:

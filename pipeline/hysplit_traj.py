@@ -6,6 +6,7 @@ that does not cover Monday is recorded, and the snapshot still archives.
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import time
@@ -64,23 +65,48 @@ def empty_product(reason: str, skipped: list[dict] | None = None) -> dict:
     }
 
 
-def build_trajectories(met_dir: Path | None = None, *, now: datetime | None = None) -> dict:
+def build_trajectories(
+    met_dir: Path | None = None,
+    *,
+    now: datetime | None = None,
+    priority: tuple[str, ...] | None = None,
+    max_bytes: int | None = None,
+    deadline_seconds: int | None = None,
+    need_start: datetime | None = None,
+    need_end: datetime | None = None,
+) -> dict:
+    if os.environ.get("SKIP_HYSPLIT") == "1":
+        return empty_product(
+            "unavailable: this ensemble run does not download HYSPLIT meteorology. "
+            "A separate workflow attaches trajectories when they are ready."
+        )
     tools = locate_executables()
     executable = tools.get("hyts_std")
     if executable is None:
-        return empty_product("HYSPLIT_EXEC is not set, so hyts_std was not run.")
+        return empty_product("unavailable: HYSPLIT_EXEC is not set, so hyts_std was not run.")
     moment = now or datetime.now(timezone.utc)
-    days = [moment.date() - timedelta(days=offset) for offset in range(0, 3)]
-    need_start, need_end = trajectory_window()
+    days = [moment.date() - timedelta(days=offset) for offset in range(0, 4)]
+    if need_start is None or need_end is None:
+        need_start, need_end = trajectory_window()
     try:
-        choice = select_forecast(list_forecast(days), need_start, need_end)
+        choice = select_forecast(
+            list_forecast(days),
+            need_start,
+            need_end,
+            **({"priority": priority} if priority is not None else {}),
+        )
     except Exception as exc:  # noqa: BLE001 — the screening run must still archive
-        return empty_product(str(exc))
+        return empty_product(f"unavailable: {exc}")
     directory = Path(met_dir or "data/arl")
     local_files = []
     try:
         for item in choice.files:
-            local_files.append(download(item, directory))
+            kwargs = {}
+            if max_bytes is not None:
+                kwargs["max_bytes"] = max_bytes
+            if deadline_seconds is not None:
+                kwargs["deadline_seconds"] = deadline_seconds
+            local_files.append(download(item, directory, **kwargs))
     except Exception as exc:  # noqa: BLE001
         return empty_product(
             f"unavailable: Could not download {choice.model} meteorology: {exc}",

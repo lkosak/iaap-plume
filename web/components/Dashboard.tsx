@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Climatology } from "@/components/Climatology";
 import { MapView } from "@/components/MapView";
 import { publicPath } from "@/lib/publicPath";
 import type { CellReadout, Hindcast, LayerName, Run, RunIndex } from "@/lib/types";
@@ -145,6 +146,8 @@ export function Dashboard() {
           </div>
         </div>
       ) : null}
+
+      <Climatology />
 
       {run ? (
         <>

@@ -20,6 +20,7 @@ Fairfield's card uses the same counts for the grid cell that contains 41.00761, 
 - It cannot give a concentration, a dose, or a comparison with a permit contour. No release mass is in the model, so those numbers cannot be computed honestly.
 - It cannot replace a monitor, a wipe sample, or a blood-lead test.
 - The colored footprint is not NOAA HYSPLIT. Trajectory lines are NOAA HYSPLIT only on the layer that says so. The post-event hindcast, when it exists, is a percent of that run's peak because the release mass is unknown. Details are in `docs/HYSPLIT.md`.
+- The historical wind panel is a climatology of past Novembers and early Decembers. It is not a forecast, not a plume, and not an exposure estimate. A year in which the wind often blew toward Fairfield does not say where Monday's plume will go.
 - The winds are forecast profiles at a few dozen points, blended between those points. They are not a full three-dimensional weather-model grid. Hills, the river, and the exact detonation column are not resolved.
 - Particle size, density, release height, and deposition rates are spans we chose because the emitted mix was not published. A different span would move the deposition layer.
 - Particles that leave the map window are counted in the run summary. Color at the edge of the map can be cut off.

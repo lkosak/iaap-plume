@@ -1,0 +1,92 @@
+name: HYSPLIT trajectories
+
+on:
+  schedule:
+    # 30 minutes after the ensemble archive, so this job updates the run
+    # the ensemble just published instead of racing its commit.
+    - cron: "40 */2 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/hysplit.yml
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: hysplit-trajectories
+  cancel-in-progress: true
+
+jobs:
+  trajectories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Install the public HYSPLIT build
+        timeout-minutes: 8
+        run: bash scripts/install_hysplit.sh
+      - name: Restore ARL files from earlier cycles
+        uses: actions/cache@v4
+        with:
+          path: data/arl
+          key: arl-hysplit-${{ github.run_id }}
+          restore-keys: arl-hysplit-
+      - name: Download met and compute trajectories
+        timeout-minutes: 22
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python -u -m pipeline.hysplit_forecast --compute data/hysplit/product.json --met-dir data/arl
+      - name: Attach trajectories to the newest archive entry
+        timeout-minutes: 3
+        run: |
+          git config user.name "forecast-bot"
+          git config user.email "forecast-bot@users.noreply.github.com"
+          git pull --rebase origin main
+          python -u -m pipeline.hysplit_forecast --attach data/hysplit/product.json --out web/public/runs
+          git add web/public/runs
+          if git diff --cached --quiet; then
+            echo "No trajectory update."
+          else
+            git commit -m "Attach HYSPLIT trajectories"
+            git pull --rebase origin main
+            python -u -m pipeline.hysplit_forecast --attach data/hysplit/product.json --out web/public/runs
+            git add web/public/runs
+            if ! git diff --cached --quiet; then
+              git commit -m "Attach HYSPLIT trajectories to the newest run"
+            fi
+            git push origin HEAD:main
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Build static export
+        timeout-minutes: 8
+        working-directory: web
+        env:
+          NEXT_PUBLIC_BASE_PATH: /iaap-plume
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+  deploy:
+    needs: trajectories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

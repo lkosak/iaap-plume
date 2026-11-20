@@ -51,19 +51,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Install the public HYSPLIT build
-        timeout-minutes: 6
-        run: bash scripts/install_hysplit.sh
-      - uses: actions/cache@v4
-        with:
-          path: data/arl
-          key: arl-forecast-${{ github.run_id }}
-          restore-keys: arl-forecast-
       - name: Run the screening ensemble
         timeout-minutes: 10
         env:
           PYTHONUNBUFFERED: "1"
-        run: python -m pipeline.run_snapshot --out web/public/runs --honor-deadline
+          # Trajectories are attached by hysplit.yml so this job cannot
+          # spend its budget on a multi-gigabyte ARL download.
+          SKIP_HYSPLIT: "1"
+        run: python -u -m pipeline.run_snapshot --out web/public/runs --honor-deadline
       - name: Commit the new archive entry
         timeout-minutes: 2
         run: |

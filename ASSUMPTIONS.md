@@ -4,6 +4,8 @@ Every number below is an assumption of this screening ensemble. None of them is 
 
 The colored footprint on every run is **NOT HYSPLIT**. When the trajectory layer is present it is labeled HYSPLIT trajectories (real HYSPLIT, forecast met) and is a separate NOAA HYSPLIT calculation. It is not a concentration.
 
+The collapsed panel "Historical wind context (climatology, not a forecast)" is ERA5 reanalysis for 9 November–7 December, 2000–2025. It describes how often the wind in that calendar window has blown toward Fairfield. It is not a forecast for 23 November 2026, not a plume, and not an exposure estimate. The Monday forecast layers take precedence.
+
 ## Place
 
 - The installation marker is the OpenStreetMap centroid of the Iowa Army Ammunition Plant, relation 13087513, retrieved 2026-11-20: **40.7858281, -91.2444371**.

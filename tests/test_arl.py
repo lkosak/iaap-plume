@@ -90,6 +90,31 @@ def test_archive_prefers_nam12_day_files_and_otherwise_hrrr_chunks():
     assert len(hrrr.files) == 3
 
 
+def test_nam_is_preferred_when_the_dedicated_job_asks_for_it_first():
+    files = [
+        _file("20261123", "hysplit.t06z.hrrrf00"),
+        _file("20261123", "hysplit.t06z.hrrrf06"),
+        _file("20261123", "hysplit.t06z.hrrrf12"),
+        _file("20261123", "hysplit.t06z.hrrrf18"),
+        _file("20261120", "hysplit.t12z.namf"),
+        _file("20261120", "hysplit.t12z.gfsf"),
+    ]
+    choice = select_forecast(
+        files,
+        datetime(2026, 11, 23, 16, tzinfo=timezone.utc),
+        datetime(2026, 11, 23, 20, tzinfo=timezone.utc),
+        priority=("NAM", "HRRR", "GFS"),
+    )
+    assert choice.model == "NAM"
+    assert choice.files[0].name == "hysplit.t12z.namf"
+
+
+def test_ensemble_workflow_does_not_download_hysplit_met():
+    text = Path(__file__).resolve().parents[1].joinpath(".github/workflows/forecast.yml").read_text()
+    assert 'SKIP_HYSPLIT: "1"' in text
+    assert "install_hysplit.sh" not in text
+
+
 def test_forecast_workflow_bounds_a_hung_snapshot():
     text = Path(__file__).resolve().parents[1].joinpath(".github/workflows/forecast.yml").read_text()
     assert "timeout-minutes: 20" in text
