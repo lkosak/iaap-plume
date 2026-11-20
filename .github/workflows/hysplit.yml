@@ -2,9 +2,9 @@ name: HYSPLIT trajectories
 
 on:
   schedule:
-    # 30 minutes after the ensemble archive. This job publishes
+    # 31 minutes after the ensemble archive. This job publishes
     # web/public/hysplit/latest.json and does not edit the ensemble archive.
-    - cron: "40 */2 * * *"
+    - cron: "41 */2 * * *"
   workflow_dispatch:
   push:
     branches: [main]

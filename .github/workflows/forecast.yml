@@ -6,6 +6,9 @@ on:
     # (2026-11-25 06:00 UTC). Newest HRRR and RRFS cycles are requested on
     # each run and kept only when they cover the Monday release window.
     - cron: "10 */2 * * *"
+    # One confirmation slot. GitHub dropped 18:10Z and 20:10Z while the
+    # workflow actor was not a repository collaborator. Remove after it runs.
+    - cron: "12 21 20 11 *"
   workflow_dispatch:
 
 # contents: write so this job can append archive files.
