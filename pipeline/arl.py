@@ -9,10 +9,17 @@ the listing does not contain.
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
+
+# A 2-hour schedule cannot spend itself on multi-gigabyte ARL files.
+# The 1-degree GFS forecast file is about 1.4 GB; HRRR pieces are larger.
+MAX_MET_BYTES = 400 * 1024 * 1024
+DOWNLOAD_DEADLINE_SECONDS = 90
+READ_TIMEOUT_SECONDS = 20
 
 FORECAST_INDEX = "https://www.ready.noaa.gov/data/forecast"
 ARCHIVE_HRRR = "https://www.ready.noaa.gov/data/archives/hrrr"
@@ -51,7 +58,18 @@ class MetChoice:
     skipped: list[dict] = field(default_factory=list)
 
 
-def _get(url: str, timeout: int = 60) -> bytes:
+def enforce_met_cap(content_length: int | None, name: str) -> None:
+    """Refuse a meteorology file that is larger than the schedule can carry."""
+    if content_length is None:
+        return
+    if content_length > MAX_MET_BYTES:
+        raise RuntimeError(
+            f"{name} is {content_length} bytes, over the {MAX_MET_BYTES} byte cap. "
+            "HYSPLIT met was skipped so the screening ensemble can still publish."
+        )
+
+
+def _get(url: str, timeout: int = 25) -> bytes:
     request = Request(url, headers={"User-Agent": USER_AGENT})
     with urlopen(request, timeout=timeout) as response:
         return response.read()
@@ -251,18 +269,40 @@ def list_archive_names() -> list[str]:
 def download(item: RemoteFile, directory: Path) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     dest = directory / item.name
+    if dest.exists() and dest.stat().st_size > MAX_MET_BYTES:
+        dest.unlink()
     if dest.exists() and dest.stat().st_size > 0:
-        print(f"arl reuse {dest} ({dest.stat().st_size} bytes)")
+        print(f"arl reuse {dest} ({dest.stat().st_size} bytes)", flush=True)
         return dest
-    print(f"arl download {item.url}")
+    print(f"arl download {item.url}", flush=True)
     request = Request(item.url, headers={"User-Agent": USER_AGENT})
     temporary = dest.with_suffix(dest.suffix + ".partial")
-    with urlopen(request, timeout=120) as response, temporary.open("wb") as handle:
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            handle.write(chunk)
+    started = time.monotonic()
+    try:
+        with urlopen(request, timeout=READ_TIMEOUT_SECONDS) as response, temporary.open("wb") as handle:
+            enforce_met_cap(_content_length(response.headers.get("Content-Length")), item.name)
+            written = 0
+            while True:
+                if time.monotonic() - started > DOWNLOAD_DEADLINE_SECONDS:
+                    raise RuntimeError(
+                        f"{item.name} download exceeded {DOWNLOAD_DEADLINE_SECONDS}s "
+                        f"after {written} bytes. HYSPLIT met was skipped."
+                    )
+                chunk = response.read(256 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                enforce_met_cap(written, item.name)
+                handle.write(chunk)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     temporary.replace(dest)
-    print(f"arl saved {dest} ({dest.stat().st_size} bytes)")
+    print(f"arl saved {dest} ({dest.stat().st_size} bytes)", flush=True)
     return dest
+
+
+def _content_length(value: str | None) -> int | None:
+    if value is None or value == "":
+        return None
+    return int(value)

@@ -11,7 +11,7 @@ from pipeline.archive import publish
 from pipeline.config import UPDATE_UNTIL_UTC
 from pipeline.ensemble import build_run
 from pipeline.hysplit import check_hysplit
-from pipeline.hysplit_traj import build_trajectories
+from pipeline.hysplit_traj import build_trajectories, empty_product
 from pipeline.met import fetch_datasets
 from pipeline.official import fetch_official
 from pipeline.timeutil import stamp
@@ -52,9 +52,14 @@ def main(argv: list[str] | None = None) -> int:
         kwargs["n_particles"] = args.particles
     print("Running ensemble…")
     run = build_run(datasets, official=official, skipped=skipped, hysplit_check=hysplit, **kwargs)
-    print("Running HYSPLIT trajectories…")
-    run["hysplit"] = build_trajectories()
-    print(run["hysplit"]["label"], "real=" + str(run["hysplit"]["real_hysplit"]))
+    print("Running HYSPLIT trajectories…", flush=True)
+    try:
+        run["hysplit"] = build_trajectories()
+    except Exception as exc:  # noqa: BLE001 — the ensemble archive must still publish
+        run["hysplit"] = empty_product(
+            f"unavailable: HYSPLIT failed ({exc}). The screening ensemble was still published."
+        )
+    print(run["hysplit"]["label"], "status=" + str(run["hysplit"].get("status")), flush=True)
     if run["hysplit"].get("reason"):
         print(run["hysplit"]["reason"])
     # build_run also records datasets that do not cover the window. The npz

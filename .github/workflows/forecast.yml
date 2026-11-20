@@ -22,11 +22,14 @@ permissions:
 
 concurrency:
   group: forecast-archive
-  cancel-in-progress: false
+  # A new scheduled run replaces one that is still going, so a hung snapshot
+  # cannot queue the later hours.
+  cancel-in-progress: true
 
 jobs:
   gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     outputs:
       open: ${{ steps.window.outputs.open }}
     steps:
@@ -45,6 +48,7 @@ jobs:
     needs: gate
     if: needs.gate.outputs.open == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -52,14 +56,20 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - name: Install the public HYSPLIT build
+        timeout-minutes: 6
         run: bash scripts/install_hysplit.sh
       - uses: actions/cache@v4
         with:
           path: data/arl
           key: arl-forecast-${{ github.run_id }}
           restore-keys: arl-forecast-
-      - run: python -m pipeline.run_snapshot --out web/public/runs --honor-deadline
+      - name: Run the screening ensemble
+        timeout-minutes: 10
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python -m pipeline.run_snapshot --out web/public/runs --honor-deadline
       - name: Commit the new archive entry
+        timeout-minutes: 2
         run: |
           git config user.name "forecast-bot"
           git config user.email "forecast-bot@users.noreply.github.com"
@@ -78,6 +88,7 @@ jobs:
       - run: npm ci
         working-directory: web
       - name: Build static export
+        timeout-minutes: 8
         working-directory: web
         env:
           NEXT_PUBLIC_BASE_PATH: /iaap-plume
@@ -89,6 +100,7 @@ jobs:
   deploy:
     needs: snapshot
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

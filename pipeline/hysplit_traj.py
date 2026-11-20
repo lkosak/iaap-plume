@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -26,6 +27,10 @@ from pipeline.hysplit import locate_executables, parse_tdump, run_executable, wr
 from pipeline.timeutil import iso, stamp
 
 CHI = ZoneInfo("America/Chicago")
+# Five release times. Each hyts_std call has to finish inside this, and the
+# whole set has to finish inside the budget, or the layer is marked unavailable.
+TRAJECTORY_TIMEOUT_SECONDS = 90
+TRAJECTORY_BUDGET_SECONDS = 240
 
 
 def release_times() -> list[datetime]:
@@ -51,6 +56,7 @@ def empty_product(reason: str, skipped: list[dict] | None = None) -> dict:
             "The colored footprint is still the screening ensemble, labeled NOT HYSPLIT. "
             + reason
         ),
+        "status": "unavailable",
         "reason": reason,
         "met": None,
         "skipped": skipped or [],
@@ -76,10 +82,20 @@ def build_trajectories(met_dir: Path | None = None, *, now: datetime | None = No
         for item in choice.files:
             local_files.append(download(item, directory))
     except Exception as exc:  # noqa: BLE001
-        return empty_product(f"Could not download {choice.model} meteorology: {exc}", choice.skipped)
+        return empty_product(
+            f"unavailable: Could not download {choice.model} meteorology: {exc}",
+            choice.skipped,
+        )
     trajectories = []
     errors = []
+    started = time.monotonic()
     for when in release_times():
+        if time.monotonic() - started > TRAJECTORY_BUDGET_SECONDS:
+            return empty_product(
+                "unavailable: HYSPLIT exceeded its runtime budget. "
+                "The screening ensemble was still published.",
+                choice.skipped,
+            )
         points = [(SOURCE_LAT, SOURCE_LON, float(height)) for height in HYSPLIT_HEIGHTS_M]
         try:
             parsed = _run_one(executable, when, points, local_files)
@@ -110,6 +126,7 @@ def build_trajectories(met_dir: Path | None = None, *, now: datetime | None = No
             "The colored footprint on the other layers is a separate screening ensemble labeled NOT HYSPLIT. "
             "The public unregistered build does not run dispersion on forecast meteorology."
         ),
+        "status": "ok",
         "reason": "",
         "met": {
             "model": choice.model,
@@ -160,7 +177,7 @@ def _run_in(executable: Path, work: Path, when: datetime, points, local_files: l
             met_files=names,
         )
         (work / "SETUP.CFG").write_text("&SETUP\ntratio = 0.75,\n/\n")
-        completed = run_executable(executable, work, timeout=900)
+        completed = run_executable(executable, work, timeout=TRAJECTORY_TIMEOUT_SECONDS)
         tdump = work / "tdump"
         if not tdump.exists():
             excerpt = f"{completed.stdout}\n{completed.stderr}"[-500:]
