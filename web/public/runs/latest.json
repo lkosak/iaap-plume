@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "run_id": "20261120T162747Z",
-  "generated_at": "2026-11-20T16:27:47Z",
-  "generated_at_chicago": "Nov 20, 2026, 10:27 AM CT (America/Chicago)",
+  "run_id": "20261120T170703Z",
+  "generated_at": "2026-11-20T17:07:03Z",
+  "generated_at_chicago": "Nov 20, 2026, 11:07 AM CT (America/Chicago)",
   "timezone": "America/Chicago",
   "demo": false,
   "disclaimer": "These maps are relative model footprints from an unvalidated screening ensemble. They are not measurements of lead in air, soil, or dust, and they are not concentrations, doses, or a health determination. Follow instructions from the U.S. Army, U.S. EPA, Iowa HHS, and local emergency managers.",
@@ -68,8 +68,8 @@
     "fraction_particles_left_map": 0.0
   },
   "forecast": {
-    "retrieved_at": "2026-11-20T16:27:47Z",
-    "retrieved_at_chicago": "Nov 20, 2026, 10:27 AM CT (America/Chicago)",
+    "retrieved_at": "2026-11-20T17:07:03Z",
+    "retrieved_at_chicago": "Nov 20, 2026, 11:07 AM CT (America/Chicago)",
     "attribution": "Forecast weather data from Open-Meteo.com, using NOAA/NWS HRRR, RRFS, and GFS fields.",
     "used": [
       {
@@ -425,17 +425,6 @@
     "ensemble_window_chicago": "Nov 23, 2026, 10:00 AM CT (America/Chicago) through Nov 23, 2026, 2:00 PM CT (America/Chicago)",
     "fetched_mentions": [
       {
-        "id": "army-advisory",
-        "publisher": "U.S. Army",
-        "kind": "official",
-        "url": "https://www.army.mil/article/296772",
-        "status": "excerpt",
-        "title": "IAAAP Public Advisory | Article | The United States Army",
-        "flags": [
-          "mentions Friday or Nov 20"
-        ]
-      },
-      {
         "id": "press-cbs",
         "publisher": "CBS Chicago",
         "kind": "press",
@@ -461,8 +450,8 @@
     ]
   },
   "official": {
-    "retrieved_at": "2026-11-20T16:27:46Z",
-    "retrieved_at_chicago": "Nov 20, 2026, 10:27 AM CT (America/Chicago)",
+    "retrieved_at": "2026-11-20T17:07:03Z",
+    "retrieved_at_chicago": "Nov 20, 2026, 11:07 AM CT (America/Chicago)",
     "preface": "This section is agency and news material. It is not output from the screening model. If a source was unreachable, the link is still listed.",
     "sources": [
       {
@@ -490,20 +479,20 @@
         "publisher": "U.S. Army",
         "kind": "official",
         "url": "https://www.army.mil/article/296772",
-        "title": "IAAAP Public Advisory | Article | The United States Army",
-        "status": "excerpt",
-        "excerpt": "controlled detonations are scheduled at Iowa Army Ammunition Plant on Nov. 20 at approximately noon. Residents will be asked to vacate the area from 8 a.m. to 2 p.m. local time, and dust is expected to linger for no more than one hour, depending on wind speed. This is a planned and controlled safety operation to dispose of the degraded lead azide and has been permitted by the U.S. Environmental Protection Agency\u2026",
-        "note": "Excerpt from the page as retrieved, trimmed for length."
+        "title": "Army public advisory",
+        "status": "unavailable",
+        "excerpt": null,
+        "note": "HTTP 403. The link is unchanged."
       },
       {
         "id": "army-asc",
         "publisher": "U.S. Army Sustainment Command",
         "kind": "official",
         "url": "https://www.army.mil/asc#org-iowa-army-ammunition-plant",
-        "title": "ASC Installation Community Notifications",
-        "status": "excerpt",
-        "excerpt": "CONTROLLED DETONATION OF LEAD AZIDE: The Iowa Department of Natural Resources (DNR) is proposing to renew the Title V Operating Permit for Iowa Army Ammunition Plant. This facility is located at 17571 DMC Highway 79, Middleton, IA 52638. DNR is currently reviewing an application for renewal submitted by Iowa Army Ammunition Plant to operate their existing National Security Facility. Read more:\u2026",
-        "note": "Excerpt from the page as retrieved, trimmed for length."
+        "title": "ASC installation community notifications",
+        "status": "unavailable",
+        "excerpt": null,
+        "note": "HTTP 403. The link is unchanged."
       },
       {
         "id": "iowa-hhs",
