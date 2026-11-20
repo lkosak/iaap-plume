@@ -1,0 +1,145 @@
+export type LayerName = "air" | "deposition" | "arrival";
+
+export type OfficialSource = {
+  id: string;
+  publisher: string;
+  kind: string;
+  url: string;
+  title: string;
+  status: string;
+  excerpt: string | null;
+  note: string;
+};
+
+export type Run = {
+  run_id: string;
+  generated_at_chicago: string;
+  disclaimer: string;
+  narrative: string;
+  engine: {
+    label: string;
+    is_hysplit: boolean;
+    summary: string;
+    hysplit_check?: { reason?: string };
+  };
+  event: {
+    release_window_chicago: string;
+    release_window_note: string;
+    simulation_hours_after_release: number;
+  };
+  schedule: {
+    change: string;
+    change_basis: string;
+    ensemble_center_chicago: string;
+    ensemble_window_chicago: string;
+    fetched_mentions: {
+      publisher: string;
+      kind: string;
+      url: string;
+      title: string;
+      flags: string[];
+      status: string;
+    }[];
+  };
+  source: {
+    name: string;
+    lat: number;
+    lon: number;
+    bbox: { south: number; west: number; north: number; east: number };
+    note: string;
+  };
+  receptor: {
+    name: string;
+    lat: number;
+    lon: number;
+    distance_km: number;
+    bearing_deg_from_source: number;
+    bearing_word: string;
+    air_hits: number;
+    air_neighbor_hits: number;
+    deposition_hits: number;
+    n_members: number;
+    arrival_earliest_chicago: string | null;
+    arrival_latest_chicago: string | null;
+    nearest_overlap_km: number | null;
+    cell: { i: number; j: number };
+  };
+  footprint: {
+    direction_word: string;
+    fraction_particles_left_map: number;
+  };
+  forecast: {
+    retrieved_at_chicago: string | null;
+    attribution: string;
+    used: { label: string; cycle: string; levels: string[]; notes: string[] }[];
+    skipped: { label: string; cycle: string; reason: string }[];
+  };
+  ensemble: {
+    n_members: number;
+    particles_per_member: number;
+    varied: string[];
+    members: {
+      id: string;
+      model_label: string;
+      cycle: string;
+      release_local: string;
+      source_lat: number;
+      source_lon: number;
+    }[];
+  };
+  grid: {
+    lat_min: number;
+    lon_min: number;
+    lat_max: number;
+    lon_max: number;
+    dlat: number;
+    dlon: number;
+    nlat: number;
+    nlon: number;
+    air_member_hits: string;
+    deposition_member_hits: string;
+    air_relative_pct: string;
+    deposition_relative_pct: string;
+    arrival_earliest_min: string;
+    arrival_latest_min: string;
+    arrival_origin: string;
+    no_arrival: number;
+    n_members: number;
+  };
+  official: {
+    retrieved_at_chicago?: string;
+    preface?: string;
+    sources: OfficialSource[];
+    monitoring: {
+      status: string;
+      note: string;
+      rows: { time: string; lat: string; lon: string; value: string; unit: string; source: string }[];
+    };
+  };
+};
+
+export type RunIndex = {
+  latest_id: string;
+  updated_at_chicago?: string;
+  runs: {
+    id: string;
+    generated_at_chicago?: string;
+    engine_label?: string;
+    fairfield_air_hits?: number;
+    fairfield_deposition_hits?: number;
+    n_members?: number;
+    models?: string[];
+    forecast_retrieved_at_chicago?: string;
+  }[];
+};
+
+export type CellReadout = {
+  lat: number;
+  lon: number;
+  airHits: number;
+  depHits: number;
+  airPct: number;
+  depPct: number;
+  earliest: number;
+  latest: number;
+};

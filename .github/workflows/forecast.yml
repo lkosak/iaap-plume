@@ -1,0 +1,86 @@
+name: Forecast archive
+
+on:
+  schedule:
+    # Every two hours. The snapshot itself stops after 24 Nov 2026 CT
+    # (2026-11-25 06:00 UTC). Newest HRRR and RRFS cycles are requested on
+    # each run and kept only when they cover the Monday release window.
+    - cron: "10 */2 * * *"
+  workflow_dispatch:
+
+# contents: write so this job can append archive files.
+# pages + id-token so this job can redeploy. A push made with the default
+# GITHUB_TOKEN does not start the Pages workflow.
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: forecast-archive
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      open: ${{ steps.window.outputs.open }}
+    steps:
+      - id: window
+        run: |
+          now=$(date -u +%s)
+          deadline=$(date -u -d '2026-11-25 06:00:00 UTC' +%s)
+          if [ "$now" -lt "$deadline" ]; then
+            echo "open=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "open=false" >> "$GITHUB_OUTPUT"
+            echo "Past 24 Nov 2026 CT. Scheduled updates stop. Manual dispatch still deploys."
+          fi
+
+  snapshot:
+    needs: gate
+    if: needs.gate.outputs.open == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m pipeline.run_snapshot --out web/public/runs --honor-deadline
+      - name: Commit the new archive entry
+        run: |
+          git config user.name "forecast-bot"
+          git config user.email "forecast-bot@users.noreply.github.com"
+          git add web/public/runs
+          if git diff --cached --quiet; then
+            echo "No new archive files."
+          else
+            git commit -m "Archive forecast screening run"
+            git push origin HEAD:main
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Build static export
+        working-directory: web
+        env:
+          NEXT_PUBLIC_BASE_PATH: /iaap-plume
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+
+  deploy:
+    needs: snapshot
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

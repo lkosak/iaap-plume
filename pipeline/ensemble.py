@@ -1,0 +1,471 @@
+"""Cross meteorology with release assumptions and count member overlap.
+
+The number that goes on the map is how many members put a particle in a
+cell, divided by how many members ran. It is not a concentration.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from typing import NamedTuple
+
+import numpy as np
+
+from pipeline.config import (
+    DISCLAIMER,
+    ENGINE_LABEL,
+    ENGINE_NAME,
+    ENGINE_SUMMARY,
+    ENSEMBLE_SEED,
+    EVENT_DATE,
+    FAIRFIELD_LAT,
+    FAIRFIELD_LON,
+    FAIRFIELD_NAME,
+    N_PARTICLES,
+    SIM_HOURS,
+    SOURCE_BBOX,
+    SOURCE_LAT,
+    SOURCE_LON,
+    SOURCE_NAME,
+    TIMEZONE,
+    DT_SECONDS,
+)
+from pipeline.encoding import pack_u16, pack_u8
+from pipeline.geo import bearing_deg, cardinal, cardinal_word, haversine_km
+from pipeline.grid import Grid
+from pipeline.hysplit import check_hysplit
+from pipeline.met import MetDataset
+from pipeline.model import MemberSpec, Physics, run_member
+from pipeline.timeutil import CHI, iso, stamp, utc_now
+
+
+class Scenario(NamedTuple):
+    hour: int
+    height_m: float
+    diameter_um: float
+    density: float
+    dep_scale: float
+    wet_scale: float
+    turb_scale: float
+    rotation_deg: float
+    speed_factor: float
+
+
+# Centered on noon CT Monday. The Friday noon plan was postponed to Nov 23;
+# the Monday clock time can still move, so members span 10:00–14:00 with
+# two of the six releases at noon.
+SCENARIOS = (
+    Scenario(10, 20, 2, 2500, 0.5, 0.5, 0.7, 0, 1.00),
+    Scenario(11, 200, 10, 8000, 1.2, 1.0, 1.2, 20, 0.85),
+    Scenario(12, 60, 25, 8000, 1.5, 1.3, 1.0, -20, 1.15),
+    Scenario(12, 300, 2, 3000, 0.6, 0.8, 1.4, 15, 1.05),
+    Scenario(13, 30, 8, 6000, 1.0, 1.6, 0.8, -15, 0.90),
+    Scenario(14, 150, 2, 2500, 0.4, 1.2, 1.3, 25, 1.20),
+)
+
+
+def schedule_block(official: dict, start: datetime, end: datetime) -> dict:
+    """Schedule the ensemble was built around, plus any dates the latest fetch mentioned."""
+    mentions = []
+    for source in official.get("sources") or []:
+        blob = " ".join(
+            part for part in (source.get("title"), source.get("excerpt"), source.get("note")) if part
+        ).lower()
+        flags = []
+        if any(token in blob for token in ("november 23", "nov. 23", "nov 23", "monday")):
+            flags.append("mentions Monday or Nov 23")
+        if any(token in blob for token in ("november 20", "nov. 20", "nov 20", "friday")):
+            flags.append("mentions Friday or Nov 20")
+        if any(token in blob for token in ("postpon", "delay", "reschedul")):
+            flags.append("mentions a schedule change")
+        if flags:
+            mentions.append(
+                {
+                    "id": source.get("id"),
+                    "publisher": source.get("publisher"),
+                    "kind": source.get("kind"),
+                    "url": source.get("url"),
+                    "status": source.get("status"),
+                    "title": source.get("title"),
+                    "flags": flags,
+                }
+            )
+    return {
+        "change": "Postponed from about noon CT on Friday, Nov 20, 2026, to Monday, Nov 23, 2026.",
+        "change_basis": (
+            "CBS Chicago reported the postponement and attributed it to the Army. "
+            "The lines below are whatever the latest page retrieval actually contained. "
+            "If they disagree with this sentence, believe the agency page."
+        ),
+        "ensemble_center_chicago": stamp(release_local(12)),
+        "ensemble_window_chicago": f"{stamp(start)} through {stamp(end)}",
+        "fetched_mentions": mentions,
+    }
+
+
+def release_local(hour: int) -> datetime:
+    return datetime(EVENT_DATE.year, EVENT_DATE.month, EVENT_DATE.day, hour, 0, tzinfo=CHI)
+
+
+def render_narrative(stats: dict) -> str:
+    n = stats["n_members"]
+    hits = stats["air_hits"]
+    neigh = stats["air_neighbor_hits"]
+    distance = stats["distance_km"]
+    toward = stats["bearing_word"]
+    bearing = stats["bearing_deg"]
+    parts = [
+        f"Fairfield is {distance:.0f} km {toward} of the installation centroid ({bearing:.0f}°).",
+    ]
+    if stats["cells_with_air"] <= 0:
+        parts.append("No airborne footprint fell inside the map window on this run.")
+    else:
+        parts.append(
+            "The relative airborne footprint on this run lies mostly "
+            f"to the {stats['footprint_word']} of the installation centroid."
+        )
+    if hits <= 0 and neigh <= 0:
+        edge = stats["nearest_overlap_km"]
+        if edge is None:
+            parts.append(
+                "No ensemble member placed an airborne particle in the Fairfield cell or the eight cells around it."
+            )
+        else:
+            parts.append(
+                "No ensemble member placed an airborne particle in the Fairfield cell or the eight cells around it. "
+                f"The nearest cell with any member is about {edge:.0f} km from Fairfield."
+            )
+    else:
+        parts.append(
+            f"Airborne overlap in the Fairfield cell: {hits} of {n} ensemble members. "
+            f"The highest overlap in that cell or its eight neighbors is {neigh} of {n}."
+        )
+    parts.append(
+        f"Surface-deposition overlap in the Fairfield cell: {stats['deposition_hits']} of {n} members, "
+        "using the assumed removal parameters."
+    )
+    if hits > 0 and stats.get("arrival_earliest_chicago") and stats.get("arrival_latest_chicago"):
+        if stats["arrival_earliest_chicago"] == stats["arrival_latest_chicago"]:
+            parts.append(
+                "Members that reach the Fairfield cell first do so around "
+                f"{stats['arrival_earliest_chicago']}."
+            )
+        else:
+            parts.append(
+                "First arrival in the Fairfield cell, across members that reach it, runs from "
+                f"{stats['arrival_earliest_chicago']} to {stats['arrival_latest_chicago']}."
+            )
+    if stats["fraction_left_map"] >= 0.15:
+        parts.append(
+            f"About {stats['fraction_left_map']:.0%} of particles left the map window during the "
+            f"{stats['hours']:.0f}-hour simulation, so the drawn footprint is cut off at the border."
+        )
+    parts.append("Overlap counts model scenarios. It is not a measurement of lead and not a concentration.")
+    return " ".join(parts)
+
+
+def build_run(
+    datasets: list[MetDataset],
+    *,
+    official: dict,
+    skipped: list[dict] | None = None,
+    retrieved_at: datetime | None = None,
+    seed: int = ENSEMBLE_SEED,
+    n_particles: int = N_PARTICLES,
+    scenarios: tuple[Scenario, ...] | None = None,
+    hours: float | None = None,
+    physics: Physics | None = None,
+    hysplit_check: dict | None = None,
+    generated_at: datetime | None = None,
+) -> dict:
+    scenarios = scenarios or SCENARIOS
+    hours = SIM_HOURS if hours is None else hours
+    physics = physics or Physics()
+    generated = generated_at or utc_now()
+    if not scenarios:
+        raise RuntimeError("at least one release scenario is required")
+    window_start = release_local(min(item.hour for item in scenarios))
+    window_end = release_local(max(item.hour for item in scenarios)) + timedelta(hours=hours)
+    skipped_out = list(skipped or [])
+    usable: list[MetDataset] = []
+    for dataset in datasets:
+        ok, reason = dataset.covers(window_start, window_end)
+        if ok:
+            usable.append(dataset)
+        else:
+            skipped_out.append(
+                {
+                    "model_id": dataset.model_id,
+                    "label": dataset.model_label,
+                    "cycle": dataset.cycle,
+                    "reason": reason,
+                }
+            )
+    if not usable:
+        detail = "; ".join(f"{item['label']} {item['cycle']}: {item['reason']}" for item in skipped_out)
+        raise RuntimeError(f"No meteorological dataset covers the release window. {detail}")
+
+    origin = window_start
+    grid = Grid()
+    member_rows = []
+    results = []
+    for dataset in usable:
+        for scenario in scenarios:
+            index = len(member_rows)
+            member_seed = seed + index * 10007
+            rng = np.random.default_rng(member_seed)
+            south, west, north, east = SOURCE_BBOX
+            release_lat = float(rng.uniform(south, north))
+            release_lon = float(rng.uniform(west, east))
+            release_time = release_local(scenario.hour)
+            spec = MemberSpec(
+                seed=member_seed + 17,
+                release_time=release_time,
+                minute_origin=origin,
+                release_lat=release_lat,
+                release_lon=release_lon,
+                height_m=scenario.height_m,
+                diameter_m=scenario.diameter_um * 1e-6,
+                density=scenario.density,
+                wind_rotation_deg=scenario.rotation_deg,
+                wind_speed_factor=scenario.speed_factor,
+                dep_scale=scenario.dep_scale,
+                wet_scale=scenario.wet_scale,
+                turb_scale=scenario.turb_scale,
+                n_particles=n_particles,
+                hours=hours,
+                dt=DT_SECONDS,
+            )
+            result = run_member(dataset, spec, grid, physics)
+            results.append(result)
+            member_rows.append(
+                {
+                    "id": f"m{index:02d}",
+                    "model_id": dataset.model_id,
+                    "model_label": dataset.model_label,
+                    "cycle": dataset.cycle,
+                    "release_local": stamp(release_time),
+                    "release_iso": iso(release_time),
+                    "height_m": scenario.height_m,
+                    "diameter_um": scenario.diameter_um,
+                    "density_kg_m3": scenario.density,
+                    "wind_rotation_deg": scenario.rotation_deg,
+                    "wind_speed_factor": scenario.speed_factor,
+                    "dep_scale": scenario.dep_scale,
+                    "wet_scale": scenario.wet_scale,
+                    "turb_scale": scenario.turb_scale,
+                    "source_lat": round(release_lat, 5),
+                    "source_lon": round(release_lon, 5),
+                    "settling_m_s": result["settling_m_s"],
+                    "n_deposited": result["n_deposited"],
+                    "n_outside_end": result["n_outside_end"],
+                }
+            )
+
+    n_members = len(results)
+    air_hits = np.zeros(grid.shape, dtype=np.int16)
+    dep_hits = np.zeros(grid.shape, dtype=np.int16)
+    dwell = np.zeros(grid.shape, dtype=np.float64)
+    dep_weight = np.zeros(grid.shape, dtype=np.float64)
+    earliest = np.full(grid.shape, 65535, dtype=np.int32)
+    latest = np.zeros(grid.shape, dtype=np.int32)
+    reached = np.zeros(grid.shape, dtype=bool)
+    left = 0
+    particles = 0
+    for result in results:
+        air_hits += (result["air_dwell"] > 0).astype(np.int16)
+        dep_hits += (result["deposited"] > 0).astype(np.int16)
+        dwell += result["air_dwell"]
+        dep_weight += result["deposited"]
+        first = result["first_minute"]
+        hit = first >= 0
+        earliest = np.where(hit, np.minimum(earliest, first), earliest)
+        latest = np.where(hit & (first >= latest), first, latest)
+        reached |= hit
+        left += result["n_outside_end"] + result["n_deposited_outside"]
+        particles += result["n_particles"]
+    earliest = np.where(reached, earliest, 65535)
+    latest = np.where(reached, latest, 65535)
+
+    def norm_pct(weights: np.ndarray) -> np.ndarray:
+        peak = float(weights.max()) if weights.size else 0.0
+        if peak <= 0:
+            return np.zeros(grid.shape, dtype=np.uint8)
+        return np.clip(np.rint(100.0 * weights / peak), 0, 100).astype(np.uint8)
+
+    i_f, j_f = grid.index_scalar(FAIRFIELD_LAT, FAIRFIELD_LON)
+    i0, i1 = max(0, i_f - 1), min(grid.nlat, i_f + 2)
+    j0, j1 = max(0, j_f - 1), min(grid.nlon, j_f + 2)
+    bearing = bearing_deg(SOURCE_LAT, SOURCE_LON, FAIRFIELD_LAT, FAIRFIELD_LON)
+    distance = float(haversine_km(SOURCE_LAT, SOURCE_LON, FAIRFIELD_LAT, FAIRFIELD_LON))
+    cells = int((air_hits > 0).sum())
+    if cells:
+        ii, jj = np.nonzero(air_hits > 0)
+        lats = grid.lat_min + (ii + 0.5) * grid.dlat
+        lons = grid.lon_min + (jj + 0.5) * grid.dlon
+        weights = air_hits[ii, jj].astype(float)
+        lat_bar = float((weights * lats).sum() / weights.sum())
+        lon_bar = float((weights * lons).sum() / weights.sum())
+        footprint_bearing = bearing_deg(SOURCE_LAT, SOURCE_LON, lat_bar, lon_bar)
+        footprint_word = cardinal_word(footprint_bearing)
+        nearest = float(haversine_km(FAIRFIELD_LAT, FAIRFIELD_LON, lats, lons).min())
+    else:
+        lat_bar = lon_bar = footprint_bearing = None
+        footprint_word = "nowhere on the map"
+        nearest = None
+    air_cell = int(air_hits[i_f, j_f])
+    dep_cell = int(dep_hits[i_f, j_f])
+    neighbor = int(air_hits[i0:i1, j0:j1].max()) if air_hits.size else 0
+    arrival_e = int(earliest[i_f, j_f])
+    arrival_l = int(latest[i_f, j_f])
+    arrival_e_stamp = None
+    arrival_l_stamp = None
+    if air_cell > 0 and arrival_e != 65535:
+        arrival_e_stamp = stamp(origin + timedelta(minutes=arrival_e))
+        arrival_l_stamp = stamp(origin + timedelta(minutes=arrival_l))
+    fraction_left = (left / particles) if particles else 0.0
+    stats = {
+        "n_members": n_members,
+        "air_hits": air_cell,
+        "air_neighbor_hits": neighbor,
+        "deposition_hits": dep_cell,
+        "distance_km": distance,
+        "bearing_deg": bearing,
+        "bearing_word": cardinal_word(bearing),
+        "cells_with_air": cells,
+        "footprint_word": footprint_word,
+        "nearest_overlap_km": nearest,
+        "fraction_left_map": fraction_left,
+        "hours": hours,
+        "arrival_earliest_chicago": arrival_e_stamp,
+        "arrival_latest_chicago": arrival_l_stamp,
+    }
+    hysplit = hysplit_check if hysplit_check is not None else check_hysplit()
+    from datetime import timezone as utc_tz
+
+    run_id = generated.astimezone(utc_tz.utc).strftime("%Y%m%dT%H%M%SZ")
+    used = []
+    for dataset in usable:
+        used.append(
+            {
+                "model_id": dataset.model_id,
+                "label": dataset.model_label,
+                "cycle": dataset.cycle,
+                "valid_start": dataset.valid_start,
+                "valid_end": dataset.valid_end,
+                "levels": dataset.level_names,
+                "n_stations": int(dataset.lat.size),
+                "notes": dataset.notes,
+                "request_urls": dataset.request_urls,
+            }
+        )
+    retrieved = retrieved_at or generated
+    return {
+        "schema_version": 1,
+        "run_id": run_id,
+        "generated_at": iso(generated),
+        "generated_at_chicago": stamp(generated),
+        "timezone": TIMEZONE,
+        "demo": False,
+        "disclaimer": DISCLAIMER,
+        "narrative": render_narrative(stats),
+        "engine": {
+            "name": ENGINE_NAME,
+            "is_hysplit": False,
+            "label": ENGINE_LABEL,
+            "summary": ENGINE_SUMMARY,
+            "hysplit_check": hysplit,
+        },
+        "event": {
+            "name": "Planned controlled detonations of degraded lead azide at IAAAP",
+            "date": EVENT_DATE.isoformat(),
+            "release_window_chicago": (
+                f"{stamp(window_start)} through {stamp(release_local(max(item.hour for item in scenarios)))}"
+            ),
+            "release_window_note": (
+                "The Friday, Nov 20, about-noon CT plan was postponed to Monday, Nov 23. "
+                "This ensemble is centered on noon America/Chicago, with releases from "
+                "10:00 AM to 2:00 PM CT because the Monday clock time can still change. "
+                "Read the official section for the latest agency wording."
+            ),
+            "simulation_hours_after_release": hours,
+            "step_seconds": DT_SECONDS,
+        },
+        "source": {
+            "name": SOURCE_NAME,
+            "lat": SOURCE_LAT,
+            "lon": SOURCE_LON,
+            "bbox": {
+                "south": SOURCE_BBOX[0],
+                "west": SOURCE_BBOX[1],
+                "north": SOURCE_BBOX[2],
+                "east": SOURCE_BBOX[3],
+            },
+            "note": (
+                "Marker is the OpenStreetMap centroid of the installation. "
+                "Each ensemble member picks a release point inside the installation outline "
+                "because the in-place detonation coordinate was not published."
+            ),
+        },
+        "receptor": {
+            "name": FAIRFIELD_NAME,
+            "lat": FAIRFIELD_LAT,
+            "lon": FAIRFIELD_LON,
+            "distance_km": round(distance, 1),
+            "bearing_deg_from_source": round(bearing, 1),
+            "bearing_cardinal": cardinal(bearing),
+            "bearing_word": cardinal_word(bearing),
+            "cell": {"i": i_f, "j": j_f},
+            "air_hits": air_cell,
+            "air_neighbor_hits": neighbor,
+            "deposition_hits": dep_cell,
+            "n_members": n_members,
+            "arrival_earliest_chicago": arrival_e_stamp,
+            "arrival_latest_chicago": arrival_l_stamp,
+            "nearest_overlap_km": None if nearest is None else round(nearest, 1),
+        },
+        "footprint": {
+            "cells_with_air": cells,
+            "centroid_lat": lat_bar,
+            "centroid_lon": lon_bar,
+            "centroid_bearing_deg": None if footprint_bearing is None else round(footprint_bearing, 1),
+            "direction_word": footprint_word,
+            "fraction_particles_left_map": round(fraction_left, 3),
+        },
+        "forecast": {
+            "retrieved_at": iso(retrieved) if isinstance(retrieved, datetime) else str(retrieved),
+            "retrieved_at_chicago": stamp(retrieved) if isinstance(retrieved, datetime) else None,
+            "attribution": "Forecast weather data from Open-Meteo.com, using NOAA/NWS HRRR, RRFS, and GFS fields.",
+            "used": used,
+            "skipped": skipped_out,
+        },
+        "ensemble": {
+            "n_members": n_members,
+            "particles_per_member": n_particles,
+            "seed": seed,
+            "varied": [
+                "meteorology (model and, when available, an older GFS cycle)",
+                "wind direction and speed perturbations",
+                "release time inside the daytime window",
+                "release height",
+                "particle diameter and density",
+                "release point inside the installation",
+                "dry deposition, wet removal, and mixing scales",
+            ],
+            "members": member_rows,
+        },
+        "grid": {
+            **grid.as_dict(),
+            "air_member_hits": pack_u8(air_hits),
+            "deposition_member_hits": pack_u8(dep_hits),
+            "air_relative_pct": pack_u8(norm_pct(dwell)),
+            "deposition_relative_pct": pack_u8(norm_pct(dep_weight)),
+            "arrival_earliest_min": pack_u16(earliest.astype(np.uint16)),
+            "arrival_latest_min": pack_u16(latest.astype(np.uint16)),
+            "arrival_origin": iso(origin),
+            "no_arrival": 65535,
+            "n_members": n_members,
+        },
+        "schedule": schedule_block(official, window_start, release_local(max(item.hour for item in scenarios))),
+        "official": official,
+    }
