@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
 import type { CellReadout, Hindcast, LayerName, Run } from "@/lib/types";
-import { decodeU16, decodeU8 } from "@/lib/grid";
+import { cellEdges, decodeU16, decodeU8 } from "@/lib/grid";
 
 type Props = {
   run: Run;
@@ -110,11 +110,12 @@ export function MapView({ run, layer, hindcast, hindcastField, onPick }: Props) 
       }
     }
     ctx.putImageData(image, 0, 0);
+    // One image stretched from the southwest corner to the northeast corner is
+    // linear in Web Mercator, not in latitude. On the 17° grid that put the
+    // plant's cell about 63 km north of IAAAP. Each cell is drawn from its
+    // own stored edges instead.
     if (layer !== "hindcast") {
-      L.imageOverlay(canvas.toDataURL(), [[grid.lat_min, grid.lon_min], [grid.lat_max, grid.lon_max]], {
-        opacity: layer === "hysplit" ? 0.35 : 0.92,
-        interactive: false,
-      }).addTo(group);
+      paintCells(L, map, group, coloredCells(grid, image), layer === "hysplit" ? 0.35 : 0.92);
     }
     if (layer === "hindcast" && hindcast?.grid) {
       const relative = hindcastField === "deposition" ? hindcast.grid.relative_deposition : hindcast.grid.relative_air;
@@ -139,10 +140,7 @@ export function MapView({ run, layer, hindcast, hindcastField, onPick }: Props) 
           }
         }
         boardCtx.putImageData(pixels, 0, 0);
-        L.imageOverlay(board.toDataURL(), [[hindcast.grid.lat_min, hindcast.grid.lon_min], [hindcast.grid.lat_max, hindcast.grid.lon_max]], {
-          opacity: 0.9,
-          interactive: false,
-        }).addTo(group);
+        paintCells(L, map, group, coloredCells(hindcast.grid, pixels), 0.9);
       }
     }
     if (layer === "hysplit") {
@@ -211,6 +209,75 @@ export function MapView({ run, layer, hindcast, hindcastField, onPick }: Props) 
   }, [ready, run, layer, hindcast, hindcastField]);
 
   return <div ref={host} className="h-[58dvh] min-h-[320px] w-full md:h-full md:min-h-[560px]" />;
+}
+
+type PaintedCell = { south: number; north: number; west: number; east: number; color: string };
+
+function coloredCells(
+  grid: { lat_min: number; lon_min: number; dlat: number; dlon: number; nlat: number; nlon: number },
+  image: ImageData,
+): PaintedCell[] {
+  const cells: PaintedCell[] = [];
+  for (let i = 0; i < grid.nlat; i += 1) {
+    for (let j = 0; j < grid.nlon; j += 1) {
+      const row = grid.nlat - 1 - i;
+      const pixel = (row * grid.nlon + j) * 4;
+      const alpha = image.data[pixel + 3];
+      if (alpha <= 0) continue;
+      const edges = cellEdges(grid, i, j);
+      cells.push({
+        ...edges,
+        color: `rgba(${image.data[pixel]},${image.data[pixel + 1]},${image.data[pixel + 2]},${alpha / 255})`,
+      });
+    }
+  }
+  return cells;
+}
+
+function paintCells(
+  L: typeof import("leaflet"),
+  map: Leaflet.Map,
+  group: Leaflet.LayerGroup,
+  cells: PaintedCell[],
+  opacity: number,
+) {
+  const canvas = document.createElement("canvas");
+  canvas.className = "iaap-grid";
+  canvas.style.pointerEvents = "none";
+  const pane = map.getPane("overlayPane");
+  if (!pane) return;
+  pane.appendChild(canvas);
+  const draw = () => {
+    if (map.getZoom() == null) return;
+    const size = map.getSize();
+    const dpr = window.devicePixelRatio || 1;
+    const topLeft = map.containerPointToLayerPoint([0, 0]);
+    L.DomUtil.setPosition(canvas, topLeft);
+    canvas.width = Math.max(1, size.x) * dpr;
+    canvas.height = Math.max(1, size.y) * dpr;
+    canvas.style.width = `${size.x}px`;
+    canvas.style.height = `${size.y}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.x, size.y);
+    ctx.globalAlpha = opacity;
+    for (const cell of cells) {
+      const nw = map.latLngToContainerPoint([cell.north, cell.west]);
+      const se = map.latLngToContainerPoint([cell.south, cell.east]);
+      const width = se.x - nw.x;
+      const height = se.y - nw.y;
+      if (width <= 0 || height <= 0) continue;
+      ctx.fillStyle = cell.color;
+      ctx.fillRect(nw.x, nw.y, width, height);
+    }
+  };
+  map.on("move zoom viewreset resize", draw);
+  group.on("remove", () => {
+    map.off("move zoom viewreset resize", draw);
+    canvas.remove();
+  });
+  draw();
 }
 
 function colorFor(
