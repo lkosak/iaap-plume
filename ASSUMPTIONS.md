@@ -18,7 +18,7 @@ The collapsed panel "Historical wind context (climatology, not a forecast)" is E
 
 - The date used for releases is **23 November 2026**.
 - The Friday, Nov 20, about-noon CT plan was postponed to Monday, Nov 23 (reported by CBS Chicago and attributed to the Army). Members are centered on **noon America/Chicago**, with a window of **10:00, 11:00, 12:00 (twice), 13:00, and 14:00** because the Monday clock time can still change. The dashboard repeats that schedule change and shows whatever the latest official-page retrieval actually said.
-- The two detonations described by the Army are treated as one release. A gap of minutes is smaller than the 6 km grid.
+- The two detonations described by the Army are treated as one release. A gap of minutes is smaller than the grid cell.
 - Each member is followed for **8 hours**. That is longer than the Army's statement that visible dust may linger on the order of an hour, because smaller particles can stay aloft. It is still only a same-day regional window.
 
 ## Release height
@@ -81,7 +81,7 @@ Six release scenarios are crossed with every meteorological dataset that covers 
 
 - 500 particles per member on a full run (tests use fewer).
 - The random seed is fixed (`20261123` plus a member offset) so the same inputs can be rerun.
-- The map grid is 0.06° (about 5–7 km): 39.20–43.40 N, 94.20–88.80 W.
+- The map grid is 0.08° (about 7–9 km): 32.16–49.44 N, 102.64–79.84 W, about 960 km from the installation in each direction.
 
 ## What is deliberately not assumed
 

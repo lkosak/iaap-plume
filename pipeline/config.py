@@ -25,17 +25,18 @@ DT_SECONDS = 600
 N_PARTICLES = 500
 ENSEMBLE_SEED = 20261123
 
-# Regional window: roughly Des Moines to western Illinois, Quincy to Iowa City.
-GRID_LAT_MIN = 39.20
-GRID_LON_MIN = -94.20
-GRID_DLAT = 0.06
-GRID_DLON = 0.06
-GRID_NLAT = 70  # through 43.40 N
-GRID_NLON = 90  # through 88.80 W
+# About 960 km from the installation in each direction: a day of transport at
+# about 11 m/s, and more than 300 km. 0.08° is about 7–9 km.
+GRID_LAT_MIN = 32.16
+GRID_LON_MIN = -102.64
+GRID_DLAT = 0.08
+GRID_DLON = 0.08
+GRID_NLAT = 216  # through 49.44 N
+GRID_NLON = 285  # through 79.84 W
 
-# Paired forecast points (cartesian product is built in met.fetch).
-MET_LATS = (39.6, 40.4, 41.2, 42.0, 42.8)
-MET_LONS = (-93.6, -92.6, -91.6, -90.6, -89.6)
+# Forecast profiles sampled across that same window, including a point at the plant.
+MET_LATS = (33.0, 36.0, 39.0, 41.0, 43.0, 46.0, 49.0)
+MET_LONS = (-102.0, -98.0, -94.5, -91.2, -88.0, -84.0, -80.0)
 
 # (Open-Meteo model id, short label). NAM ended 2026-11-01 and is not used.
 MODELS = (

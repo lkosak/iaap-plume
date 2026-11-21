@@ -66,6 +66,21 @@ def test_places_fall_inside_the_grid():
     grid.index_scalar(FAIRFIELD_LAT, FAIRFIELD_LON)
 
 
+def test_default_grid_covers_a_day_of_transport():
+    """At least 300 km, and enough for about a day at 11 m/s, on every side."""
+    grid = Grid()
+    edges = (
+        (grid.lat_min, SOURCE_LON),
+        (grid.lat_max, SOURCE_LON),
+        (SOURCE_LAT, grid.lon_min),
+        (SOURCE_LAT, grid.lon_max),
+    )
+    distances = [float(haversine_km(SOURCE_LAT, SOURCE_LON, lat, lon)) for lat, lon in edges]
+    assert min(distances) >= 900
+    assert grid.dlat == 0.08 and grid.dlon == 0.08
+    assert grid.nlat * grid.nlon < 80_000
+
+
 def test_opposite_winds_move_the_centroid_opposite_ways():
     t0 = int(datetime(2026, 11, 23, 12, tzinfo=timezone.utc).timestamp())
     east = _run([uniform_met(12.0, 0.0, hours=48, t0=t0)])

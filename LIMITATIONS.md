@@ -12,7 +12,7 @@ The main layer counts ensemble members. If 6 of 24 members put any airborne part
 
 A second layer shows where the same runs removed particles onto the surface, under the deposition assumptions in `ASSUMPTIONS.md`. A third layer shows the earliest and latest **first arrival** among members that reach the cell. Arrival times are model clocks, not observed arrival.
 
-Fairfield's card uses the same counts for the grid cell that contains 41.00761, -91.96369, and for the eight cells around it. The grid is about 6 km across, so a puff that clips a corner can fall in a neighbor cell.
+Fairfield's card uses the same counts for the grid cell that contains 41.00761, -91.96369, and for the eight cells around it. The grid is about 7–9 km across, so a puff that clips a corner can fall in a neighbor cell.
 
 ## What this cannot establish
 
