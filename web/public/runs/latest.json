@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "run_id": "20261122T084846Z",
-  "generated_at": "2026-11-22T08:48:46Z",
-  "generated_at_chicago": "Nov 22, 2026, 2:48 AM CT (America/Chicago)",
+  "run_id": "20261122T104843Z",
+  "generated_at": "2026-11-22T10:48:43Z",
+  "generated_at_chicago": "Nov 22, 2026, 4:48 AM CT (America/Chicago)",
   "timezone": "America/Chicago",
   "demo": false,
   "disclaimer": "These maps are relative model footprints from an unvalidated screening ensemble. They are not measurements of lead in air, soil, or dust, and they are not concentrations, doses, or a health determination. Follow instructions from the U.S. Army, U.S. EPA, Iowa HHS, and local emergency managers.",
@@ -68,8 +68,8 @@
     "fraction_particles_left_map": 0.0
   },
   "forecast": {
-    "retrieved_at": "2026-11-22T08:48:46Z",
-    "retrieved_at_chicago": "Nov 22, 2026, 2:48 AM CT (America/Chicago)",
+    "retrieved_at": "2026-11-22T10:48:43Z",
+    "retrieved_at_chicago": "Nov 22, 2026, 4:48 AM CT (America/Chicago)",
     "attribution": "Forecast weather data from Open-Meteo.com, using NOAA/NWS HRRR, RRFS, and GFS fields.",
     "used": [
       {
@@ -596,8 +596,8 @@
     ]
   },
   "official": {
-    "retrieved_at": "2026-11-22T08:48:45Z",
-    "retrieved_at_chicago": "Nov 22, 2026, 2:48 AM CT (America/Chicago)",
+    "retrieved_at": "2026-11-22T10:48:39Z",
+    "retrieved_at_chicago": "Nov 22, 2026, 4:48 AM CT (America/Chicago)",
     "preface": "This section is agency and news material. It is not output from the screening model. If a source was unreachable, the link is still listed.",
     "sources": [
       {
