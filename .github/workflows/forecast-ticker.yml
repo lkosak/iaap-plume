@@ -24,12 +24,6 @@ on:
         default: "false"
   schedule:
     - cron: "25 */2 * * *"
-  # One push starts the chain. Later edits of this file should not.
-  # Removed once the first live ticker is running.
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/forecast-ticker.yml
 
 permissions:
   actions: write
