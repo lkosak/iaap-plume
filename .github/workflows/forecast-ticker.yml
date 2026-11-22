@@ -24,11 +24,12 @@ on:
         default: "false"
   schedule:
     - cron: "25 */2 * * *"
+  # One push starts the chain. Later edits of this file should not.
+  # Removed once the first live ticker is running.
   push:
     branches: [main]
     paths:
       - .github/workflows/forecast-ticker.yml
-      - scripts/forecast_ticker.sh
 
 permissions:
   actions: write
@@ -45,7 +46,7 @@ jobs:
       - id: gate
         env:
           GH_TOKEN: ${{ github.token }}
-          MODE: ${{ github.event_name == 'push' && 'dry-run' || github.event.inputs.mode || 'live' }}
+          MODE: ${{ github.event.inputs.mode || 'live' }}
           HANDOFF: ${{ github.event.inputs.handoff || 'false' }}
         run: bash scripts/forecast_ticker.sh gate
 
@@ -62,8 +63,8 @@ jobs:
       - name: Dispatch forecasts, then hand off
         env:
           GH_TOKEN: ${{ github.token }}
-          MODE: ${{ github.event_name == 'push' && 'dry-run' || github.event.inputs.mode || 'live' }}
+          MODE: ${{ github.event.inputs.mode || 'live' }}
           HANDOFF: ${{ github.event.inputs.handoff || 'false' }}
-          INTERVAL_SECONDS: ${{ github.event_name == 'push' && '20' || '7200' }}
-          HANDOFF_SECONDS: ${{ github.event_name == 'push' && '25' || '20400' }}
+          INTERVAL_SECONDS: "7200"
+          HANDOFF_SECONDS: "20400"
         run: bash scripts/forecast_ticker.sh run
