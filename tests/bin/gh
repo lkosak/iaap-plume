@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Test double for the ticker. Records the command and answers the in-progress query.
+echo "$*" >> "${GH_LOG:?}"
+if [[ "$*" == *in_progress* ]]; then
+  echo "${MOCK_OTHERS:-0}"
+fi
+exit 0

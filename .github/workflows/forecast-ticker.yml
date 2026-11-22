@@ -1,0 +1,69 @@
+name: Forecast ticker
+
+# GitHub cron skips slots on this repo. This job dispatches Forecast archive
+# with the built-in GITHUB_TOKEN (workflow_dispatch from that token does start
+# a run), then dispatches the next ticker before the 6-hour job limit.
+# A second start exits in the gate while one ticker is in progress.
+# The cron below only revives the chain when none is running.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: live, dry-run, or dry-run-child
+        required: false
+        default: live
+        type: choice
+        options:
+          - live
+          - dry-run
+          - dry-run-child
+      handoff:
+        description: true only for the successor dispatched by a running ticker
+        required: false
+        default: "false"
+  schedule:
+    - cron: "25 */2 * * *"
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/forecast-ticker.yml
+      - scripts/forecast_ticker.sh
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      proceed: ${{ steps.gate.outputs.proceed }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ github.event_name == 'push' && 'dry-run' || github.event.inputs.mode || 'live' }}
+          HANDOFF: ${{ github.event.inputs.handoff || 'false' }}
+        run: bash scripts/forecast_ticker.sh gate
+
+  tick:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    concurrency:
+      group: forecast-ticker
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dispatch forecasts, then hand off
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ github.event_name == 'push' && 'dry-run' || github.event.inputs.mode || 'live' }}
+          HANDOFF: ${{ github.event.inputs.handoff || 'false' }}
+          INTERVAL_SECONDS: ${{ github.event_name == 'push' && '20' || '7200' }}
+          HANDOFF_SECONDS: ${{ github.event_name == 'push' && '25' || '20400' }}
+        run: bash scripts/forecast_ticker.sh run
