@@ -22,6 +22,7 @@ from pipeline.config import (
     FAIRFIELD_LON,
     FAIRFIELD_NAME,
     N_PARTICLES,
+    RELEASE_DATES,
     SIM_HOURS,
     SOURCE_BBOX,
     SOURCE_LAT,
@@ -91,7 +92,11 @@ def schedule_block(official: dict, start: datetime, end: datetime) -> dict:
                 }
             )
     return {
-        "change": "Postponed from about noon CT on Friday, Nov 20, 2026, to Monday, Nov 23, 2026.",
+        "change": (
+            "Postponed from about noon CT on Friday, Nov 20, 2026. "
+            "The date may be Monday, Nov 23, or Tuesday, Nov 24, 2026. "
+            "The exact clock time is still unannounced."
+        ),
         "change_basis": (
             "CBS Chicago reported the postponement and attributed it to the Army. "
             "The lines below are whatever the latest page retrieval actually contained. "
@@ -103,8 +108,14 @@ def schedule_block(official: dict, start: datetime, end: datetime) -> dict:
     }
 
 
-def release_local(hour: int) -> datetime:
-    return datetime(EVENT_DATE.year, EVENT_DATE.month, EVENT_DATE.day, hour, 0, tzinfo=CHI)
+def release_local(hour: int, day=None) -> datetime:
+    when = day or EVENT_DATE
+    return datetime(when.year, when.month, when.day, hour, 0, tzinfo=CHI)
+
+
+def _day_label(day) -> tuple[str, str]:
+    names = {23: ("Monday", "Mon Nov 23"), 24: ("Tuesday", "Tue Nov 24")}
+    return names.get(day.day, (day.strftime("%A"), day.isoformat()))
 
 
 def render_narrative(stats: dict) -> str:
@@ -164,36 +175,48 @@ def render_narrative(stats: dict) -> str:
     return " ".join(parts)
 
 
-def build_run(
+def _sparse_cells(air_hits, dep_hits, air_pct, dep_pct, earliest, latest) -> list[dict]:
+    occupied = np.nonzero((air_hits > 0) | (dep_hits > 0))
+    cells = []
+    for i, j in zip(occupied[0].tolist(), occupied[1].tolist()):
+        cells.append(
+            {
+                "i": int(i),
+                "j": int(j),
+                "air": int(air_hits[i, j]),
+                "dep": int(dep_hits[i, j]),
+                "air_pct": int(air_pct[i, j]),
+                "dep_pct": int(dep_pct[i, j]),
+                "earliest": int(earliest[i, j]),
+                "latest": int(latest[i, j]),
+            }
+        )
+    return cells
+
+
+def _simulate_day(
     datasets: list[MetDataset],
+    day,
     *,
-    official: dict,
-    skipped: list[dict] | None = None,
-    retrieved_at: datetime | None = None,
-    seed: int = ENSEMBLE_SEED,
-    n_particles: int = N_PARTICLES,
-    scenarios: tuple[Scenario, ...] | None = None,
-    hours: float | None = None,
-    physics: Physics | None = None,
-    hysplit_check: dict | None = None,
-    generated_at: datetime | None = None,
+    scenarios: tuple[Scenario, ...],
+    hours: float,
+    physics: Physics,
+    seed: int,
+    n_particles: int,
+    fetch_skipped: list[dict],
 ) -> dict:
-    scenarios = scenarios or SCENARIOS
-    hours = SIM_HOURS if hours is None else hours
-    physics = physics or Physics()
-    generated = generated_at or utc_now()
-    if not scenarios:
-        raise RuntimeError("at least one release scenario is required")
-    window_start = release_local(min(item.hour for item in scenarios))
-    window_end = release_local(max(item.hour for item in scenarios)) + timedelta(hours=hours)
-    skipped_out = list(skipped or [])
+    """One 10:00 AM–2:00 PM CT release window. Models that end too soon are dropped for this day only."""
+    weekday, label = _day_label(day)
+    window_start = release_local(min(item.hour for item in scenarios), day)
+    window_end = release_local(max(item.hour for item in scenarios), day) + timedelta(hours=hours)
+    skipped = list(fetch_skipped)
     usable: list[MetDataset] = []
     for dataset in datasets:
         ok, reason = dataset.covers(window_start, window_end)
         if ok:
             usable.append(dataset)
         else:
-            skipped_out.append(
+            skipped.append(
                 {
                     "model_id": dataset.model_id,
                     "label": dataset.model_label,
@@ -201,12 +224,65 @@ def build_run(
                     "reason": reason,
                 }
             )
-    if not usable:
-        detail = "; ".join(f"{item['label']} {item['cycle']}: {item['reason']}" for item in skipped_out)
-        raise RuntimeError(f"No meteorological dataset covers the release window. {detail}")
-
-    origin = window_start
     grid = Grid()
+    origin = window_start
+    empty_grid = {
+        **grid.as_dict(),
+        "encoding": "sparse",
+        "cells": [],
+        "arrival_origin": iso(origin),
+        "no_arrival": 65535,
+        "n_members": 0,
+    }
+    if not usable:
+        return {
+            "id": day.isoformat(),
+            "label": label,
+            "weekday": weekday,
+            "date": day.isoformat(),
+            "n_members": 0,
+            "particles_per_member": n_particles,
+            "release_window_chicago": (
+                f"{stamp(window_start)} through {stamp(release_local(max(item.hour for item in scenarios), day))}"
+            ),
+            "narrative": (
+                f"No forecast in this run reaches the {label} 10:00 AM–2:00 PM CT window "
+                "through the 8 hours after the last release. "
+                "Overlap counts are not a measurement of lead and not a concentration."
+            ),
+            "receptor": {
+                "name": FAIRFIELD_NAME,
+                "lat": FAIRFIELD_LAT,
+                "lon": FAIRFIELD_LON,
+                "distance_km": round(float(haversine_km(SOURCE_LAT, SOURCE_LON, FAIRFIELD_LAT, FAIRFIELD_LON)), 1),
+                "bearing_deg_from_source": round(bearing_deg(SOURCE_LAT, SOURCE_LON, FAIRFIELD_LAT, FAIRFIELD_LON), 1),
+                "bearing_cardinal": cardinal(bearing_deg(SOURCE_LAT, SOURCE_LON, FAIRFIELD_LAT, FAIRFIELD_LON)),
+                "bearing_word": cardinal_word(bearing_deg(SOURCE_LAT, SOURCE_LON, FAIRFIELD_LAT, FAIRFIELD_LON)),
+                "cell": {"i": 0, "j": 0},
+                "air_hits": 0,
+                "air_neighbor_hits": 0,
+                "deposition_hits": 0,
+                "n_members": 0,
+                "arrival_earliest_chicago": None,
+                "arrival_latest_chicago": None,
+                "nearest_overlap_km": None,
+            },
+            "footprint": {
+                "cells_with_air": 0,
+                "centroid_lat": None,
+                "centroid_lon": None,
+                "centroid_bearing_deg": None,
+                "direction_word": "nowhere on the map",
+                "fraction_particles_left_map": 0.0,
+            },
+            "used": [],
+            "skipped": skipped,
+            "members": [],
+            "grid": empty_grid,
+            "dense": None,
+            "covered": False,
+        }
+
     member_rows = []
     results = []
     for dataset in usable:
@@ -217,7 +293,7 @@ def build_run(
             south, west, north, east = SOURCE_BBOX
             release_lat = float(rng.uniform(south, north))
             release_lon = float(rng.uniform(west, east))
-            release_time = release_local(scenario.hour)
+            release_time = release_local(scenario.hour, day)
             spec = MemberSpec(
                 seed=member_seed + 17,
                 release_time=release_time,
@@ -293,6 +369,8 @@ def build_run(
             return np.zeros(grid.shape, dtype=np.uint8)
         return np.clip(np.rint(100.0 * weights / peak), 0, 100).astype(np.uint8)
 
+    air_pct = norm_pct(dwell)
+    dep_pct = norm_pct(dep_weight)
     i_f, j_f = grid.index_scalar(FAIRFIELD_LAT, FAIRFIELD_LON)
     i0, i1 = max(0, i_f - 1), min(grid.nlat, i_f + 2)
     j0, j1 = max(0, j_f - 1), min(grid.nlon, j_f + 2)
@@ -340,73 +418,39 @@ def build_run(
         "arrival_earliest_chicago": arrival_e_stamp,
         "arrival_latest_chicago": arrival_l_stamp,
     }
-    hysplit = hysplit_check if hysplit_check is not None else check_hysplit()
-    from datetime import timezone as utc_tz
-
-    run_id = generated.astimezone(utc_tz.utc).strftime("%Y%m%dT%H%M%SZ")
-    used = []
-    for dataset in usable:
-        used.append(
-            {
-                "model_id": dataset.model_id,
-                "label": dataset.model_label,
-                "cycle": dataset.cycle,
-                "valid_start": dataset.valid_start,
-                "valid_end": dataset.valid_end,
-                "levels": dataset.level_names,
-                "n_stations": int(dataset.lat.size),
-                "notes": dataset.notes,
-                "request_urls": dataset.request_urls,
-            }
-        )
-    retrieved = retrieved_at or generated
+    used = [
+        {
+            "model_id": dataset.model_id,
+            "label": dataset.model_label,
+            "cycle": dataset.cycle,
+            "valid_start": dataset.valid_start,
+            "valid_end": dataset.valid_end,
+            "levels": dataset.level_names,
+            "n_stations": int(dataset.lat.size),
+            "notes": dataset.notes,
+            "request_urls": dataset.request_urls,
+        }
+        for dataset in usable
+    ]
+    packed_grid = {
+        **grid.as_dict(),
+        "encoding": "sparse",
+        "cells": _sparse_cells(air_hits, dep_hits, air_pct, dep_pct, earliest, latest),
+        "arrival_origin": iso(origin),
+        "no_arrival": 65535,
+        "n_members": n_members,
+    }
     return {
-        "schema_version": 1,
-        "run_id": run_id,
-        "generated_at": iso(generated),
-        "generated_at_chicago": stamp(generated),
-        "timezone": TIMEZONE,
-        "demo": False,
-        "disclaimer": DISCLAIMER,
+        "id": day.isoformat(),
+        "label": label,
+        "weekday": weekday,
+        "date": day.isoformat(),
+        "n_members": n_members,
+        "particles_per_member": n_particles,
+        "release_window_chicago": (
+            f"{stamp(window_start)} through {stamp(release_local(max(item.hour for item in scenarios), day))}"
+        ),
         "narrative": render_narrative(stats),
-        "engine": {
-            "name": ENGINE_NAME,
-            "is_hysplit": False,
-            "label": ENGINE_LABEL,
-            "summary": ENGINE_SUMMARY,
-            "hysplit_check": hysplit,
-        },
-        "event": {
-            "name": "Planned controlled detonations of degraded lead azide at IAAAP",
-            "date": EVENT_DATE.isoformat(),
-            "release_window_chicago": (
-                f"{stamp(window_start)} through {stamp(release_local(max(item.hour for item in scenarios)))}"
-            ),
-            "release_window_note": (
-                "The Friday, Nov 20, about-noon CT plan was postponed to Monday, Nov 23. "
-                "This ensemble is centered on noon America/Chicago, with releases from "
-                "10:00 AM to 2:00 PM CT because the Monday clock time can still change. "
-                "Read the official section for the latest agency wording."
-            ),
-            "simulation_hours_after_release": hours,
-            "step_seconds": DT_SECONDS,
-        },
-        "source": {
-            "name": SOURCE_NAME,
-            "lat": SOURCE_LAT,
-            "lon": SOURCE_LON,
-            "bbox": {
-                "south": SOURCE_BBOX[0],
-                "west": SOURCE_BBOX[1],
-                "north": SOURCE_BBOX[2],
-                "east": SOURCE_BBOX[3],
-            },
-            "note": (
-                "Marker is the OpenStreetMap centroid of the installation. "
-                "Each ensemble member picks a release point inside the installation outline "
-                "because the in-place detonation coordinate was not published."
-            ),
-        },
         "receptor": {
             "name": FAIRFIELD_NAME,
             "lat": FAIRFIELD_LAT,
@@ -432,15 +476,133 @@ def build_run(
             "direction_word": footprint_word,
             "fraction_particles_left_map": round(fraction_left, 3),
         },
+        "used": used,
+        "skipped": skipped,
+        "members": member_rows,
+        "grid": packed_grid,
+        "dense": {
+            "air_hits": air_hits,
+            "dep_hits": dep_hits,
+            "air_pct": air_pct,
+            "dep_pct": dep_pct,
+            "earliest": earliest,
+            "latest": latest,
+            "origin": origin,
+        },
+        "covered": True,
+        "window_start": window_start,
+        "window_end_release": release_local(max(item.hour for item in scenarios), day),
+    }
+
+
+def build_run(
+    datasets: list[MetDataset],
+    *,
+    official: dict,
+    skipped: list[dict] | None = None,
+    retrieved_at: datetime | None = None,
+    seed: int = ENSEMBLE_SEED,
+    n_particles: int = N_PARTICLES,
+    scenarios: tuple[Scenario, ...] | None = None,
+    hours: float | None = None,
+    physics: Physics | None = None,
+    hysplit_check: dict | None = None,
+    generated_at: datetime | None = None,
+) -> dict:
+    scenarios = scenarios or SCENARIOS
+    hours = SIM_HOURS if hours is None else hours
+    physics = physics or Physics()
+    generated = generated_at or utc_now()
+    if not scenarios:
+        raise RuntimeError("at least one release scenario is required")
+    fetch_skipped = list(skipped or [])
+    days = [
+        _simulate_day(
+            datasets,
+            day,
+            scenarios=scenarios,
+            hours=hours,
+            physics=physics,
+            seed=seed,
+            n_particles=n_particles,
+            fetch_skipped=fetch_skipped,
+        )
+        for day in RELEASE_DATES
+    ]
+    monday = next(item for item in days if item["date"] == EVENT_DATE.isoformat())
+    if not monday["covered"]:
+        detail = "; ".join(f"{item['label']} {item['cycle']}: {item['reason']}" for item in monday["skipped"])
+        raise RuntimeError(f"No meteorological dataset covers the Monday release window. {detail}")
+    hysplit = hysplit_check if hysplit_check is not None else check_hysplit()
+    from datetime import timezone as utc_tz
+
+    run_id = generated.astimezone(utc_tz.utc).strftime("%Y%m%dT%H%M%SZ")
+    dense = monday["dense"]
+    retrieved = retrieved_at or generated
+    public_days = {}
+    for item in days:
+        public_days[item["id"]] = {
+            key: value
+            for key, value in item.items()
+            if key not in {"dense", "covered", "window_start", "window_end_release"}
+        }
+    window_start = monday["window_start"]
+    return {
+        "schema_version": 2,
+        "run_id": run_id,
+        "generated_at": iso(generated),
+        "generated_at_chicago": stamp(generated),
+        "timezone": TIMEZONE,
+        "demo": False,
+        "disclaimer": DISCLAIMER,
+        "narrative": monday["narrative"],
+        "engine": {
+            "name": ENGINE_NAME,
+            "is_hysplit": False,
+            "label": ENGINE_LABEL,
+            "summary": ENGINE_SUMMARY,
+            "hysplit_check": hysplit,
+        },
+        "event": {
+            "name": "Planned controlled detonations of degraded lead azide at IAAAP",
+            "date": EVENT_DATE.isoformat(),
+            "release_window_chicago": monday["release_window_chicago"],
+            "release_window_note": (
+                "The Friday, Nov 20, about-noon CT plan was postponed. "
+                "The date may be Monday, Nov 23, or Tuesday, Nov 24. "
+                "Each day is screened from 10:00 AM to 2:00 PM CT because the clock time is still unannounced. "
+                "The map defaults to Monday. Read the official section for the latest agency wording."
+            ),
+            "simulation_hours_after_release": hours,
+            "step_seconds": DT_SECONDS,
+        },
+        "source": {
+            "name": SOURCE_NAME,
+            "lat": SOURCE_LAT,
+            "lon": SOURCE_LON,
+            "bbox": {
+                "south": SOURCE_BBOX[0],
+                "west": SOURCE_BBOX[1],
+                "north": SOURCE_BBOX[2],
+                "east": SOURCE_BBOX[3],
+            },
+            "note": (
+                "Marker is the OpenStreetMap centroid of the installation. "
+                "Each ensemble member picks a release point inside the installation outline "
+                "because the in-place detonation coordinate was not published."
+            ),
+        },
+        "receptor": monday["receptor"],
+        "footprint": monday["footprint"],
         "forecast": {
             "retrieved_at": iso(retrieved) if isinstance(retrieved, datetime) else str(retrieved),
             "retrieved_at_chicago": stamp(retrieved) if isinstance(retrieved, datetime) else None,
             "attribution": "Forecast weather data from Open-Meteo.com, using NOAA/NWS HRRR, RRFS, and GFS fields.",
-            "used": used,
-            "skipped": skipped_out,
+            "used": monday["used"],
+            "skipped": monday["skipped"],
         },
         "ensemble": {
-            "n_members": n_members,
+            "n_members": monday["n_members"],
             "particles_per_member": n_particles,
             "seed": seed,
             "varied": [
@@ -451,21 +613,31 @@ def build_run(
                 "particle diameter and density",
                 "release point inside the installation",
                 "dry deposition, wet removal, and mixing scales",
+                "which afternoon the release is on (Monday Nov 23 or Tuesday Nov 24)",
             ],
-            "members": member_rows,
+            "members": monday["members"],
         },
         "grid": {
-            **grid.as_dict(),
-            "air_member_hits": pack_u8(air_hits),
-            "deposition_member_hits": pack_u8(dep_hits),
-            "air_relative_pct": pack_u8(norm_pct(dwell)),
-            "deposition_relative_pct": pack_u8(norm_pct(dep_weight)),
-            "arrival_earliest_min": pack_u16(earliest.astype(np.uint16)),
-            "arrival_latest_min": pack_u16(latest.astype(np.uint16)),
-            "arrival_origin": iso(origin),
+            **{key: value for key, value in monday["grid"].items() if key not in {"encoding", "cells"}},
+            "air_member_hits": pack_u8(dense["air_hits"]),
+            "deposition_member_hits": pack_u8(dense["dep_hits"]),
+            "air_relative_pct": pack_u8(dense["air_pct"]),
+            "deposition_relative_pct": pack_u8(dense["dep_pct"]),
+            "arrival_earliest_min": pack_u16(dense["earliest"].astype(np.uint16)),
+            "arrival_latest_min": pack_u16(dense["latest"].astype(np.uint16)),
+            "arrival_origin": iso(dense["origin"]),
             "no_arrival": 65535,
-            "n_members": n_members,
+            "n_members": monday["n_members"],
         },
-        "schedule": schedule_block(official, window_start, release_local(max(item.hour for item in scenarios))),
+        "release_days": public_days,
+        "schedule": _both_days_schedule(official, window_start, monday["window_end_release"], days),
         "official": official,
     }
+
+
+def _both_days_schedule(official, start, end, days) -> dict:
+    schedule = schedule_block(official, start, end)
+    windows = [item["release_window_chicago"] for item in days]
+    if len(windows) > 1:
+        schedule["ensemble_window_chicago"] = " and ".join(windows)
+    return schedule

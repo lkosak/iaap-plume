@@ -46,7 +46,7 @@ jobs:
     needs: gate
     if: needs.gate.outputs.open == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,7 +54,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - name: Run the screening ensemble
-        timeout-minutes: 10
+        timeout-minutes: 16
         env:
           PYTHONUNBUFFERED: "1"
           # Trajectories are attached by hysplit.yml so this job cannot

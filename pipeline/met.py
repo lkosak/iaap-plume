@@ -78,7 +78,7 @@ def forecast_url(model_id: str, pairs: list[tuple[float, float]], *, cycle: str,
     url = (
         f"{host}?latitude={lats}&longitude={lons}"
         f"&hourly={','.join(names)}"
-        f"&models={model_id}&forecast_days=5&timezone=UTC&wind_speed_unit=ms"
+        f"&models={model_id}&forecast_days=7&timezone=UTC&wind_speed_unit=ms"
     )
     if run:
         url += f"&run={run}"

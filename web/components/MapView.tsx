@@ -4,19 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
 import type { CellReadout, Hindcast, LayerName, Run } from "@/lib/types";
-import { cellEdges, decodeU16, decodeU8 } from "@/lib/grid";
+import { cellEdges, decodeU8, gridArrays } from "@/lib/grid";
 
 type Props = {
   run: Run;
   layer: LayerName;
   hindcast: Hindcast | null;
   hindcastField: "air" | "deposition";
+  releaseDay: string;
   onPick: (cell: CellReadout | null) => void;
 };
 
 const HEIGHT_COLOR: Record<number, string> = { 50: "#243e73", 250: "#1f7a4d", 500: "#8a5a12" };
 
-export function MapView({ run, layer, hindcast, hindcastField, onPick }: Props) {
+export function MapView({ run, layer, hindcast, hindcastField, releaseDay, onPick }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
   const groupRef = useRef<Leaflet.LayerGroup | null>(null);
@@ -75,9 +76,10 @@ export function MapView({ run, layer, hindcast, hindcastField, onPick }: Props) 
     groupRef.current = group;
     const grid = run.grid;
     const count = grid.nlat * grid.nlon;
-    const air = decodeU8(grid.air_member_hits, count);
-    const dep = decodeU8(grid.deposition_member_hits, count);
-    const early = decodeU16(grid.arrival_earliest_min, count);
+    const arrays = gridArrays(grid);
+    const air = arrays.air;
+    const dep = arrays.dep;
+    const early = arrays.early;
     const canvas = document.createElement("canvas");
     canvas.width = grid.nlon;
     canvas.height = grid.nlat;
@@ -144,7 +146,11 @@ export function MapView({ run, layer, hindcast, hindcastField, onPick }: Props) 
       }
     }
     if (layer === "hysplit") {
-      for (const track of run.hysplit?.trajectories ?? []) {
+      const tracks = (run.hysplit?.trajectories ?? []).filter((track) => {
+        if (!track.release_day) return releaseDay === "2026-11-23";
+        return track.release_day === releaseDay;
+      });
+      for (const track of tracks) {
         const latlngs = track.points.map((point) => [point.lat, point.lon] as [number, number]);
         if (latlngs.length === 0) continue;
         const color = HEIGHT_COLOR[track.height_m_agl] ?? "#243e73";
@@ -206,7 +212,7 @@ export function MapView({ run, layer, hindcast, hindcastField, onPick }: Props) 
       map.fitBounds(bounds, { padding: [28, 28] });
       fitted.current = run.run_id;
     }
-  }, [ready, run, layer, hindcast, hindcastField]);
+  }, [ready, run, layer, hindcast, hindcastField, releaseDay]);
 
   return <div ref={host} className="h-[58dvh] min-h-[320px] w-full md:h-full md:min-h-[560px]" />;
 }
@@ -337,12 +343,13 @@ function readCell(run: Run | null, lat: number, lon: number): CellReadout | null
   if (i < 0 || j < 0 || i >= grid.nlat || j >= grid.nlon) return null;
   const count = grid.nlat * grid.nlon;
   const offset = i * grid.nlon + j;
-  const air = decodeU8(grid.air_member_hits, count);
-  const dep = decodeU8(grid.deposition_member_hits, count);
-  const airPct = decodeU8(grid.air_relative_pct, count);
-  const depPct = decodeU8(grid.deposition_relative_pct, count);
-  const early = decodeU16(grid.arrival_earliest_min, count);
-  const late = decodeU16(grid.arrival_latest_min, count);
+  const arrays = gridArrays(grid);
+  const air = arrays.air;
+  const dep = arrays.dep;
+  const airPct = arrays.airPct;
+  const depPct = arrays.depPct;
+  const early = arrays.early;
+  const late = arrays.late;
   return {
     lat: grid.lat_min + (i + 0.5) * grid.dlat,
     lon: grid.lon_min + (j + 0.5) * grid.dlon,

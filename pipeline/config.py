@@ -15,6 +15,8 @@ FAIRFIELD_LAT = 41.00761
 FAIRFIELD_LON = -91.96369
 
 EVENT_DATE = date(2026, 11, 23)
+# The clock time is unannounced. Screen both afternoons the same way.
+RELEASE_DATES = (date(2026, 11, 23), date(2026, 11, 24))
 TIMEZONE = "America/Chicago"
 
 # Unattended forecast updates stop after the evening of Nov 24 CT.

@@ -104,6 +104,35 @@ def test_grid_encoding_matches_the_fairfield_cell():
     assert hits.max() <= run["ensemble"]["n_members"]
 
 
+def test_both_release_days_are_stored_and_tuesday_can_drop_a_short_model():
+    from datetime import date
+
+    from pipeline.config import UPDATE_UNTIL_UTC
+
+    long_start = int(datetime(2026, 11, 23, 12, tzinfo=timezone.utc).timestamp())
+    long_run = _run([uniform_met(2.0, 1.0, hours=80, t0=long_start)], n_particles=8, hours=8)
+    days = long_run["release_days"]
+    assert set(days) == {"2026-11-23", "2026-11-24"}
+    monday = days["2026-11-23"]
+    tuesday = days["2026-11-24"]
+    assert monday["n_members"] == tuesday["n_members"] > 0
+    assert monday["members"][0]["release_iso"].startswith("2026-11-23")
+    assert tuesday["members"][0]["release_iso"].startswith("2026-11-24")
+    assert monday["receptor"]["air_hits"] == long_run["receptor"]["air_hits"]
+    assert "centroid_bearing_deg" in monday["footprint"] and "centroid_bearing_deg" in tuesday["footprint"]
+    assert "nearest_overlap_km" in monday["receptor"] and "nearest_overlap_km" in tuesday["receptor"]
+    assert tuesday["grid"]["encoding"] == "sparse"
+    assert tuesday["grid"]["cells"]
+    # Tuesday 2 PM CT plus 8 h is 04:00 UTC on Nov 25, before the ticker stops.
+    assert UPDATE_UNTIL_UTC >= "2026-11-25T04:00:00"
+    short_start = int(datetime(2026, 11, 23, 12, tzinfo=timezone.utc).timestamp())
+    short_run = _run([uniform_met(2.0, 1.0, hours=20, t0=short_start)], n_particles=4, hours=8)
+    assert short_run["release_days"]["2026-11-23"]["n_members"] > 0
+    assert short_run["release_days"]["2026-11-24"]["n_members"] == 0
+    assert short_run["release_days"]["2026-11-24"]["skipped"]
+    assert date.fromisoformat("2026-11-24")
+
+
 def test_same_seed_is_reproducible():
     t0 = int(datetime(2026, 11, 23, 12, tzinfo=timezone.utc).timestamp())
     datasets = [uniform_met(4.0, 2.0, hours=48, t0=t0)]

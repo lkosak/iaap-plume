@@ -9,6 +9,15 @@ import { MapView } from "@/components/MapView";
 import { publicPath } from "@/lib/publicPath";
 import type { CellReadout, Hindcast, HysplitTrajectories, LayerName, Run, RunIndex } from "@/lib/types";
 
+const MONDAY = "2026-11-23";
+const TUESDAY = "2026-11-24";
+
+function dayFromHash() {
+  if (typeof window === "undefined") return MONDAY;
+  const hash = window.location.hash.replace("#", "");
+  return hash === "tue" || hash === TUESDAY ? TUESDAY : MONDAY;
+}
+
 const LAYERS: { id: LayerName; label: string }[] = [
   { id: "air", label: "Air overlap" },
   { id: "deposition", label: "Deposition overlap" },
@@ -27,6 +36,21 @@ export function Dashboard() {
   const [trajectoryFile, setTrajectoryFile] = useState<HysplitTrajectories | null>(null);
   const [hindcastField, setHindcastField] = useState<"air" | "deposition">("air");
   const [picked, setPicked] = useState<CellReadout | null>(null);
+  const [releaseDay, setReleaseDay] = useState(MONDAY);
+
+  useEffect(() => {
+    const apply = () => setReleaseDay(dayFromHash());
+    apply();
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
+  }, []);
+
+  function chooseDay(day: string) {
+    setReleaseDay(day);
+    setPicked(null);
+    const hash = day === TUESDAY ? "#tue" : "#mon";
+    window.history.replaceState(null, "", hash);
+  }
 
   useEffect(() => {
     let stop = false;
@@ -76,7 +100,20 @@ export function Dashboard() {
     showingLatest && trajectoryFile && (trajectoryFile.real_hysplit || !run?.hysplit?.real_hysplit)
       ? trajectoryFile
       : run?.hysplit;
-  const displayRun = run && hysplit ? { ...run, hysplit } : run;
+  const day = run?.release_days?.[releaseDay];
+  const dayRun = run && day
+    ? {
+        ...run,
+        narrative: day.narrative,
+        receptor: day.receptor,
+        footprint: { ...run.footprint, ...day.footprint },
+        grid: day.grid.cells ? { ...run.grid, ...day.grid } : run.grid,
+        ensemble: { ...run.ensemble, n_members: day.n_members, members: day.members },
+        forecast: { ...run.forecast, used: day.used, skipped: day.skipped },
+        event: { ...run.event, release_window_chicago: day.release_window_chicago },
+      }
+    : run;
+  const displayRun = dayRun && hysplit ? { ...dayRun, hysplit } : dayRun;
 
   return (
     <main className="mx-auto min-h-dvh max-w-6xl px-3 py-4 md:px-6 md:py-6">
@@ -112,6 +149,25 @@ export function Dashboard() {
         </Card>
       ) : null}
 
+      {run ? (
+        <div className="mb-3">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#243e73]">Release day</p>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Release day">
+            <Button size="sm" variant={releaseDay === MONDAY ? "default" : "outline"} aria-pressed={releaseDay === MONDAY} onClick={() => chooseDay(MONDAY)}>
+              Mon Nov 23
+            </Button>
+            <Button size="sm" variant={releaseDay === TUESDAY ? "default" : "outline"} aria-pressed={releaseDay === TUESDAY} onClick={() => chooseDay(TUESDAY)} disabled={!run.release_days}>
+              Tue Nov 24
+            </Button>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-[#3d3832]">
+            Both windows are 10:00 AM–2:00 PM CT, followed for 8 hours. The exact detonation time is unannounced.
+            {day ? ` This day uses ${day.n_members} ensemble members.` : " This archived run only has the Monday window."}
+            {releaseDay === TUESDAY && day && day.n_members === 0 ? " No model in this run reaches Tuesday evening." : ""}
+          </p>
+        </div>
+      ) : null}
+
       {displayRun ? (
         <div className="grid gap-3 md:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.8fr)] md:items-start">
           <div className="overflow-hidden rounded-2xl border border-[#1c1915]/10 bg-white">
@@ -128,7 +184,7 @@ export function Dashboard() {
                 </Button>
               ))}
             </div>
-            <MapView run={displayRun} layer={layer} hindcast={hindcast} hindcastField={hindcastField} onPick={setPicked} />
+            <MapView run={displayRun} layer={layer} hindcast={hindcast} hindcastField={hindcastField} releaseDay={releaseDay} onPick={setPicked} />
             <Legend layer={layer} members={displayRun.ensemble.n_members} hindcastField={hindcastField} />
             {layer === "hindcast" ? (
               <div className="flex gap-2 px-3 py-2">
@@ -143,7 +199,7 @@ export function Dashboard() {
 
           <div className="flex flex-col gap-3">
             <StatusChips run={displayRun} />
-            <TrajectoryCard run={displayRun} />
+            <TrajectoryCard run={displayRun} releaseDay={releaseDay} />
             <FairfieldCard run={displayRun} />
             <Card>
               <CardHeader>
@@ -218,9 +274,11 @@ function StatusChips({ run }: { run: Run }) {
   );
 }
 
-function TrajectoryCard({ run }: { run: Run }) {
+function TrajectoryCard({ run, releaseDay }: { run: Run; releaseDay: string }) {
   const hysplit = run.hysplit;
   if (!hysplit) return null;
+  const tracks = (hysplit.trajectories ?? []).filter((track) => (track.release_day ? track.release_day === releaseDay : releaseDay === MONDAY));
+  const tuesdayOnlyNote = releaseDay === TUESDAY && tracks.length === 0;
   return (
     <Card>
       <CardHeader>
@@ -228,14 +286,17 @@ function TrajectoryCard({ run }: { run: Run }) {
       </CardHeader>
       <CardContent className="text-sm leading-relaxed">
         <p>{hysplit.note}</p>
+        {tuesdayOnlyNote ? (
+          <p className="mt-2">The HYSPLIT trajectories in this product are Monday-only. The shaded footprint for Tuesday is the screening ensemble, labeled NOT HYSPLIT.</p>
+        ) : null}
         {hysplit.met ? (
           <p className="mt-2">
             Met {hysplit.met.model} cycle {hysplit.met.cycle}. Valid {hysplit.met.valid_start} to {hysplit.met.valid_end}. Files: {hysplit.met.files.join(", ")}.
           </p>
         ) : null}
-        {hysplit.real_hysplit ? (
-          <p className="mt-2">{hysplit.trajectories?.length ?? 0} trajectories from 50, 250, and 500 m AGL across 10:00 AM–2:00 PM CT.</p>
-        ) : (
+        {hysplit.real_hysplit && !tuesdayOnlyNote ? (
+          <p className="mt-2">{tracks.length} trajectories from 50, 250, and 500 m AGL across 10:00 AM–2:00 PM CT.</p>
+        ) : hysplit.real_hysplit ? null : (
           <p className="mt-2">{hysplit.reason}</p>
         )}
         {hysplit.skipped?.length ? (

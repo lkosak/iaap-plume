@@ -20,8 +20,10 @@ export type HysplitTrajectories = {
     height_m_agl: number;
     release_utc: string;
     release_chicago: string;
+    release_day?: string;
     points: TrajectoryPoint[];
   }[];
+  by_day?: Record<string, { real_hysplit: boolean; reason?: string; trajectories?: HysplitTrajectories["trajectories"] }>;
 };
 
 export type Hindcast = {
@@ -142,16 +144,51 @@ export type Run = {
     dlon: number;
     nlat: number;
     nlon: number;
-    air_member_hits: string;
-    deposition_member_hits: string;
-    air_relative_pct: string;
-    deposition_relative_pct: string;
-    arrival_earliest_min: string;
-    arrival_latest_min: string;
+    air_member_hits?: string;
+    deposition_member_hits?: string;
+    air_relative_pct?: string;
+    deposition_relative_pct?: string;
+    arrival_earliest_min?: string;
+    arrival_latest_min?: string;
     arrival_origin: string;
     no_arrival: number;
     n_members: number;
+    encoding?: string;
+    cells?: {
+      i: number;
+      j: number;
+      air: number;
+      dep: number;
+      air_pct: number;
+      dep_pct: number;
+      earliest: number;
+      latest: number;
+    }[];
   };
+  release_days?: Record<
+    string,
+    {
+      id: string;
+      label: string;
+      weekday: string;
+      date: string;
+      n_members: number;
+      particles_per_member: number;
+      release_window_chicago: string;
+      narrative: string;
+      receptor: Run["receptor"];
+      footprint: Run["footprint"] & {
+        cells_with_air?: number;
+        centroid_lat?: number | null;
+        centroid_lon?: number | null;
+        centroid_bearing_deg?: number | null;
+      };
+      used: Run["forecast"]["used"];
+      skipped: Run["forecast"]["skipped"];
+      members: Run["ensemble"]["members"];
+      grid: Run["grid"];
+    }
+  >;
   hysplit?: HysplitTrajectories;
   official: {
     retrieved_at_chicago?: string;

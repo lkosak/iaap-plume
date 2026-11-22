@@ -37,10 +37,17 @@ def compute(met_dir: Path) -> dict:
     )
     product["attached_at"] = iso(datetime.now(timezone.utc))
     if product.get("real_hysplit"):
+        tuesday = (product.get("by_day") or {}).get("2026-11-24") or {}
+        day_note = (
+            "Paths are included for Monday Nov 23 and Tuesday Nov 24."
+            if tuesday.get("real_hysplit")
+            else "Paths are for Monday Nov 23. " + (tuesday.get("reason") or "Tuesday was not run.")
+        )
         product["note"] = (
             f"{HYSPLIT_TRAJECTORY_LABEL}. "
             f"Meteorology: {product['met']['model']} cycle {product['met']['cycle']} "
             f"({', '.join(product['met']['files'])}). "
+            f"{day_note} "
             "These are trajectories, not concentrations and not measurements of lead. "
             "The colored screening footprint stays labeled NOT HYSPLIT."
         )

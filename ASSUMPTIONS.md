@@ -82,6 +82,7 @@ Six release scenarios are crossed with every meteorological dataset that covers 
 - 500 particles per member on a full run (tests use fewer).
 - The random seed is fixed (`20261123` plus a member offset) so the same inputs can be rerun.
 - The map grid is 0.08° (about 7–9 km): 32.16–49.44 N, 102.64–79.84 W, about 960 km from the installation in each direction.
+- The same ensemble is run for Monday, Nov 23, and Tuesday, Nov 24, each from 10:00 AM to 2:00 PM CT, because the detonation date is unannounced. A model that does not reach that day's window is left out of that day only.
 
 ## What is deliberately not assumed
 

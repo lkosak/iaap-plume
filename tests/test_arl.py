@@ -126,8 +126,8 @@ def test_trajectory_job_publishes_its_own_file():
 
 def test_forecast_workflow_bounds_a_hung_snapshot():
     text = Path(__file__).resolve().parents[1].joinpath(".github/workflows/forecast.yml").read_text()
-    assert "timeout-minutes: 20" in text
-    assert "timeout-minutes: 10" in text
+    assert "timeout-minutes: 25" in text
+    assert "timeout-minutes: 16" in text
     assert "cancel-in-progress: true" in text
     assert "PYTHONUNBUFFERED" in text
 
