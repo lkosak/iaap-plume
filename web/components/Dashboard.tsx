@@ -278,7 +278,8 @@ function TrajectoryCard({ run, releaseDay }: { run: Run; releaseDay: string }) {
   const hysplit = run.hysplit;
   if (!hysplit) return null;
   const tracks = (hysplit.trajectories ?? []).filter((track) => (track.release_day ? track.release_day === releaseDay : releaseDay === MONDAY));
-  const tuesdayOnlyNote = releaseDay === TUESDAY && tracks.length === 0;
+  const mondayTracks = (hysplit.trajectories ?? []).filter((track) => (track.release_day ? track.release_day === MONDAY : true));
+  const tuesdayOnlyNote = releaseDay === TUESDAY && mondayTracks.length > 0 && tracks.length === 0;
   return (
     <Card>
       <CardHeader>
