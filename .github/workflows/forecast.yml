@@ -34,7 +34,7 @@ jobs:
       - id: window
         run: |
           now=$(date -u +%s)
-          deadline=$(date -u -d '2026-11-25 06:00:00 UTC' +%s)
+          deadline=$(date -u -d '2026-11-26 06:00:00 UTC' +%s)
           if [ "$now" -lt "$deadline" ]; then
             echo "open=true" >> "$GITHUB_OUTPUT"
           else
