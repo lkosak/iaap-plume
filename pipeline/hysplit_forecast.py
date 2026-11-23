@@ -13,7 +13,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from pipeline.config import EVENT_DATE, HYSPLIT_TRAJECTORY_LABEL
+from pipeline.config import EVENT_DATE, HYSPLIT_TRAJECTORY_LABEL, RELEASE_DATES
 from pipeline.hysplit_traj import build_trajectories
 from pipeline.timeutil import iso
 
@@ -37,12 +37,20 @@ def compute(met_dir: Path) -> dict:
     )
     product["attached_at"] = iso(datetime.now(timezone.utc))
     if product.get("real_hysplit"):
-        tuesday = (product.get("by_day") or {}).get("2026-11-24") or {}
-        day_note = (
-            "Paths are included for Monday Nov 23 and Tuesday Nov 24."
-            if tuesday.get("real_hysplit")
-            else "Paths are for Monday Nov 23. " + (tuesday.get("reason") or "Tuesday was not run.")
-        )
+        by_day = product.get("by_day") or {}
+        included = []
+        missing = []
+        for day in RELEASE_DATES:
+            entry = by_day.get(day.isoformat()) or {}
+            label = day.strftime("%A %b %d")
+            if entry.get("real_hysplit"):
+                included.append(label)
+            elif day != EVENT_DATE:
+                missing.append(f"{label}: {entry.get('reason') or 'was not run.'}")
+        if not missing:
+            day_note = "Paths are included for " + ", ".join(included[:-1]) + f" and {included[-1]}."
+        else:
+            day_note = "Paths are for " + " and ".join(included) + ". " + " ".join(missing)
         product["note"] = (
             f"{HYSPLIT_TRAJECTORY_LABEL}. "
             f"Meteorology: {product['met']['model']} cycle {product['met']['cycle']} "
