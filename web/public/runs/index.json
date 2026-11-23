@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-11-23T14:31:20Z",
-  "updated_at_chicago": "Nov 23, 2026, 8:31 AM CT (America/Chicago)",
-  "latest_id": "20261123T143120Z",
+  "updated_at": "2026-11-23T15:06:14Z",
+  "updated_at_chicago": "Nov 23, 2026, 9:06 AM CT (America/Chicago)",
+  "latest_id": "20261123T150614Z",
   "runs": [
     {
       "id": "20261120T155119Z",
@@ -703,6 +703,23 @@
       "n_members": 18,
       "forecast_retrieved_at": "2026-11-23T14:31:20Z",
       "forecast_retrieved_at_chicago": "Nov 23, 2026, 8:31 AM CT (America/Chicago)"
+    },
+    {
+      "id": "20261123T150614Z",
+      "generated_at": "2026-11-23T15:06:14Z",
+      "generated_at_chicago": "Nov 23, 2026, 9:06 AM CT (America/Chicago)",
+      "engine_label": "NOT HYSPLIT",
+      "is_hysplit": false,
+      "models": [
+        "RRFS latest",
+        "GFS latest",
+        "GFS previous_day1"
+      ],
+      "fairfield_air_hits": 0,
+      "fairfield_deposition_hits": 0,
+      "n_members": 18,
+      "forecast_retrieved_at": "2026-11-23T15:06:14Z",
+      "forecast_retrieved_at_chicago": "Nov 23, 2026, 9:06 AM CT (America/Chicago)"
     }
   ]
 }
