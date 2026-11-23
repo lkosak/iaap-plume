@@ -33,7 +33,7 @@ CHI = ZoneInfo("America/Chicago")
 # whole set has to finish inside the budget, or the layer is marked unavailable.
 TRAJECTORY_TIMEOUT_SECONDS = 90
 TRAJECTORY_BUDGET_SECONDS = 900
-TUESDAY = RELEASE_DATES[1]
+EXTRA_DAYS = RELEASE_DATES[1:]
 
 
 def release_times(day=None) -> list[datetime]:
@@ -141,40 +141,52 @@ def build_trajectories(
                     "points": track["points"],
                 }
             )
-    tuesday_reason = ""
-    tuesday_tracks: list[dict] = []
-    tuesday_need = release_times(TUESDAY)[-1] + timedelta(hours=SIM_HOURS)
     valid_end = datetime.fromisoformat(choice.valid_end)
-    if valid_end < tuesday_need:
-        tuesday_reason = (
-            f"Forecast meteorology ends {choice.valid_end}, before Tuesday's trajectories "
-            f"would finish ({iso(tuesday_need)}). This HYSPLIT layer is Monday-only."
-        )
-    elif time.monotonic() - started > TRAJECTORY_BUDGET_SECONDS:
-        tuesday_reason = "Tuesday trajectories were not run because the runtime budget was spent on Monday. This HYSPLIT layer is Monday-only."
-    else:
-        for when in release_times(TUESDAY):
-            if time.monotonic() - started > TRAJECTORY_BUDGET_SECONDS:
-                tuesday_reason = "Tuesday trajectories were cut off by the runtime budget. This HYSPLIT layer is Monday-only where Tuesday is missing."
-                break
-            points = [(SOURCE_LAT, SOURCE_LON, float(height)) for height in HYSPLIT_HEIGHTS_M]
-            try:
-                parsed = _run_one(executable, when, points, local_files)
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"{stamp(when)}: {exc}")
-                continue
-            for height, track in zip(HYSPLIT_HEIGHTS_M, parsed):
-                tuesday_tracks.append(
-                    {
-                        "height_m_agl": height,
-                        "release_utc": iso(when),
-                        "release_chicago": stamp(when),
-                        "release_day": TUESDAY.isoformat(),
-                        "points": track["points"],
-                    }
-                )
-        if not tuesday_tracks and not tuesday_reason:
-            tuesday_reason = "hyts_std did not return Tuesday trajectories. This HYSPLIT layer is Monday-only."
+    extra_tracks: dict[str, list[dict]] = {}
+    extra_reasons: dict[str, str] = {}
+    covered: list[str] = ["Monday"]
+    for day in EXTRA_DAYS:
+        name = day.strftime("%A")
+        tracks_for_day: list[dict] = []
+        reason = ""
+        need = release_times(day)[-1] + timedelta(hours=SIM_HOURS)
+        if valid_end < need:
+            reason = (
+                f"Forecast meteorology ends {choice.valid_end}, before {name}'s trajectories "
+                f"would finish ({iso(need)}). This HYSPLIT layer covers {' and '.join(covered)} only."
+            )
+        elif time.monotonic() - started > TRAJECTORY_BUDGET_SECONDS:
+            reason = (
+                f"{name} trajectories were not run because the runtime budget was spent "
+                f"on {' and '.join(covered)}. This HYSPLIT layer covers {' and '.join(covered)} only."
+            )
+        else:
+            for when in release_times(day):
+                if time.monotonic() - started > TRAJECTORY_BUDGET_SECONDS:
+                    reason = f"{name} trajectories were cut off by the runtime budget. Part of {name} may be missing."
+                    break
+                points = [(SOURCE_LAT, SOURCE_LON, float(height)) for height in HYSPLIT_HEIGHTS_M]
+                try:
+                    parsed = _run_one(executable, when, points, local_files)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"{stamp(when)}: {exc}")
+                    continue
+                for height, track in zip(HYSPLIT_HEIGHTS_M, parsed):
+                    tracks_for_day.append(
+                        {
+                            "height_m_agl": height,
+                            "release_utc": iso(when),
+                            "release_chicago": stamp(when),
+                            "release_day": day.isoformat(),
+                            "points": track["points"],
+                        }
+                    )
+            if not tracks_for_day and not reason:
+                reason = f"hyts_std did not return {name} trajectories. This HYSPLIT layer covers {' and '.join(covered)} only."
+        extra_tracks[day.isoformat()] = tracks_for_day
+        extra_reasons[day.isoformat()] = reason
+        if tracks_for_day:
+            covered.append(name)
     if not trajectories:
         return empty_product(
             "hyts_std did not return trajectories. " + "; ".join(errors),
@@ -203,13 +215,17 @@ def build_trajectories(
             "source": "NOAA ARL forecast files (ftp://ftp.arl.noaa.gov/forecast/ via https://www.ready.noaa.gov/data/forecast/).",
         },
         "skipped": choice.skipped,
-        "trajectories": trajectories + tuesday_tracks,
+        "trajectories": trajectories
+        + [track for day in EXTRA_DAYS for track in extra_tracks[day.isoformat()]],
         "by_day": {
             EVENT_DATE.isoformat(): {"real_hysplit": True, "trajectories": trajectories},
-            TUESDAY.isoformat(): {
-                "real_hysplit": bool(tuesday_tracks),
-                "reason": tuesday_reason,
-                "trajectories": tuesday_tracks,
+            **{
+                day.isoformat(): {
+                    "real_hysplit": bool(extra_tracks[day.isoformat()]),
+                    "reason": extra_reasons[day.isoformat()],
+                    "trajectories": extra_tracks[day.isoformat()],
+                }
+                for day in EXTRA_DAYS
             },
         },
         "errors": errors,
