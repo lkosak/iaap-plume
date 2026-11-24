@@ -110,18 +110,22 @@ def test_all_release_days_are_stored_and_a_short_model_drops_later_days():
     from pipeline.config import UPDATE_UNTIL_UTC
 
     long_start = int(datetime(2026, 11, 23, 12, tzinfo=timezone.utc).timestamp())
-    long_run = _run([uniform_met(2.0, 1.0, hours=80, t0=long_start)], n_particles=8, hours=8)
+    long_run = _run([uniform_met(2.0, 1.0, hours=120, t0=long_start)], n_particles=8, hours=8)
     days = long_run["release_days"]
-    assert set(days) == {"2026-11-23", "2026-11-24", "2026-11-25"}
+    assert set(days) == {"2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"}
     monday = days["2026-11-23"]
     tuesday = days["2026-11-24"]
     wednesday = days["2026-11-25"]
-    assert monday["n_members"] == tuesday["n_members"] == wednesday["n_members"] > 0
+    thursday = days["2026-11-26"]
+    friday = days["2026-11-27"]
+    assert monday["n_members"] == tuesday["n_members"] == wednesday["n_members"] == thursday["n_members"] == friday["n_members"] > 0
     assert monday["members"][0]["release_iso"].startswith("2026-11-23")
     assert tuesday["members"][0]["release_iso"].startswith("2026-11-24")
     assert wednesday["members"][0]["release_iso"].startswith("2026-11-25")
+    assert thursday["members"][0]["release_iso"].startswith("2026-11-26")
+    assert friday["members"][0]["release_iso"].startswith("2026-11-27")
     assert monday["receptor"]["air_hits"] == long_run["receptor"]["air_hits"]
-    for day in (monday, tuesday, wednesday):
+    for day in (monday, tuesday, wednesday, thursday, friday):
         assert "centroid_bearing_deg" in day["footprint"]
         assert "nearest_overlap_km" in day["receptor"]
         assert day["grid"]["encoding"] == "sparse"
@@ -130,6 +134,8 @@ def test_all_release_days_are_stored_and_a_short_model_drops_later_days():
     assert UPDATE_UNTIL_UTC >= "2026-11-25T04:00:00"
     # Wednesday 2 PM CT plus 8 h is 04:00 UTC on Nov 26, before the ticker stops.
     assert UPDATE_UNTIL_UTC >= "2026-11-26T04:00:00"
+    # Friday 2 PM CT plus 8 h is 04:00 UTC on Nov 28, before the ticker stops.
+    assert UPDATE_UNTIL_UTC >= "2026-11-28T04:00:00"
     short_start = int(datetime(2026, 11, 23, 12, tzinfo=timezone.utc).timestamp())
     short_run = _run([uniform_met(2.0, 1.0, hours=20, t0=short_start)], n_particles=4, hours=8)
     assert short_run["release_days"]["2026-11-23"]["n_members"] > 0
@@ -137,6 +143,10 @@ def test_all_release_days_are_stored_and_a_short_model_drops_later_days():
     assert short_run["release_days"]["2026-11-24"]["skipped"]
     assert short_run["release_days"]["2026-11-25"]["n_members"] == 0
     assert short_run["release_days"]["2026-11-25"]["skipped"]
+    assert short_run["release_days"]["2026-11-26"]["n_members"] == 0
+    assert short_run["release_days"]["2026-11-26"]["skipped"]
+    assert short_run["release_days"]["2026-11-27"]["n_members"] == 0
+    assert short_run["release_days"]["2026-11-27"]["skipped"]
     assert date.fromisoformat("2026-11-24")
 
 
