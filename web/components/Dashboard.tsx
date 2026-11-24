@@ -12,13 +12,23 @@ import type { CellReadout, Hindcast, HysplitTrajectories, LayerName, Run, RunInd
 const MONDAY = "2026-11-23";
 const TUESDAY = "2026-11-24";
 const WEDNESDAY = "2026-11-25";
+const THURSDAY = "2026-11-26";
+const FRIDAY = "2026-11-27";
+
+const DAY_NAMES: Record<string, string> = {
+  [MONDAY]: "Monday",
+  [TUESDAY]: "Tuesday",
+  [WEDNESDAY]: "Wednesday",
+  [THURSDAY]: "Thursday",
+  [FRIDAY]: "Friday",
+};
 
 function dayFromHash() {
-  if (typeof window === "undefined") return MONDAY;
+  if (typeof window === "undefined") return WEDNESDAY;
   const hash = window.location.hash.replace("#", "");
-  if (hash === "tue" || hash === TUESDAY) return TUESDAY;
-  if (hash === "wed" || hash === WEDNESDAY) return WEDNESDAY;
-  return MONDAY;
+  if (hash === "thu" || hash === THURSDAY) return THURSDAY;
+  if (hash === "fri" || hash === FRIDAY) return FRIDAY;
+  return WEDNESDAY;
 }
 
 const LAYERS: { id: LayerName; label: string }[] = [
@@ -39,7 +49,7 @@ export function Dashboard() {
   const [trajectoryFile, setTrajectoryFile] = useState<HysplitTrajectories | null>(null);
   const [hindcastField, setHindcastField] = useState<"air" | "deposition">("air");
   const [picked, setPicked] = useState<CellReadout | null>(null);
-  const [releaseDay, setReleaseDay] = useState(MONDAY);
+  const [releaseDay, setReleaseDay] = useState(WEDNESDAY);
 
   useEffect(() => {
     const apply = () => setReleaseDay(dayFromHash());
@@ -51,7 +61,7 @@ export function Dashboard() {
   function chooseDay(day: string) {
     setReleaseDay(day);
     setPicked(null);
-    const hash = day === TUESDAY ? "#tue" : day === WEDNESDAY ? "#wed" : "#mon";
+    const hash = day === THURSDAY ? "#thu" : day === FRIDAY ? "#fri" : "#wed";
     window.history.replaceState(null, "", hash);
   }
 
@@ -156,21 +166,20 @@ export function Dashboard() {
         <div className="mb-3">
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#243e73]">Release day</p>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Release day">
-            <Button size="sm" variant={releaseDay === MONDAY ? "default" : "outline"} aria-pressed={releaseDay === MONDAY} onClick={() => chooseDay(MONDAY)}>
-              Mon Nov 23
-            </Button>
-            <Button size="sm" variant={releaseDay === TUESDAY ? "default" : "outline"} aria-pressed={releaseDay === TUESDAY} onClick={() => chooseDay(TUESDAY)} disabled={!run.release_days}>
-              Tue Nov 24
-            </Button>
             <Button size="sm" variant={releaseDay === WEDNESDAY ? "default" : "outline"} aria-pressed={releaseDay === WEDNESDAY} onClick={() => chooseDay(WEDNESDAY)} disabled={!run.release_days}>
               Wed Nov 25
+            </Button>
+            <Button size="sm" variant={releaseDay === THURSDAY ? "default" : "outline"} aria-pressed={releaseDay === THURSDAY} onClick={() => chooseDay(THURSDAY)} disabled={!run.release_days}>
+              Thu Nov 26
+            </Button>
+            <Button size="sm" variant={releaseDay === FRIDAY ? "default" : "outline"} aria-pressed={releaseDay === FRIDAY} onClick={() => chooseDay(FRIDAY)} disabled={!run.release_days}>
+              Fri Nov 27
             </Button>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-[#3d3832]">
             Each window is 10:00 AM–2:00 PM CT, followed for 8 hours. The exact detonation time is unannounced.
             {day ? ` This day uses ${day.n_members} ensemble members.` : " This archived run has no separate window for the selected day."}
-            {releaseDay === TUESDAY && day && day.n_members === 0 ? " No model in this run reaches Tuesday evening." : ""}
-            {releaseDay === WEDNESDAY && day && day.n_members === 0 ? " No model in this run reaches Wednesday evening." : ""}
+            {day && day.n_members === 0 ? ` No model in this run reaches ${DAY_NAMES[releaseDay] ?? "that day"} evening.` : ""}
           </p>
         </div>
       ) : null}
@@ -287,7 +296,7 @@ function TrajectoryCard({ run, releaseDay }: { run: Run; releaseDay: string }) {
   const tracks = (hysplit.trajectories ?? []).filter((track) => (track.release_day ? track.release_day === releaseDay : releaseDay === MONDAY));
   const mondayTracks = (hysplit.trajectories ?? []).filter((track) => (track.release_day ? track.release_day === MONDAY : true));
   const mondayOnlyNote = releaseDay !== MONDAY && mondayTracks.length > 0 && tracks.length === 0;
-  const dayName = releaseDay === WEDNESDAY ? "Wednesday" : "Tuesday";
+  const dayName = DAY_NAMES[releaseDay] ?? "that day";
   return (
     <Card>
       <CardHeader>
