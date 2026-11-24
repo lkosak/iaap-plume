@@ -22,6 +22,7 @@ from pipeline.config import (
     FAIRFIELD_LON,
     FAIRFIELD_NAME,
     N_PARTICLES,
+    PLANNED_RELEASE_HOUR_CT,
     RELEASE_DATES,
     SIM_HOURS,
     SOURCE_BBOX,
@@ -52,9 +53,8 @@ class Scenario(NamedTuple):
     speed_factor: float
 
 
-# Centered on noon CT Wednesday. The Friday noon plan was postponed, most
-# recently to Nov 25; the clock time can still move, so members span 10:00–14:00 with
-# two of the six releases at noon.
+# Timing for the Thursday and Friday fallback scenarios. Wednesday uses the
+# planned release hour for each of these physical parameter combinations.
 SCENARIOS = (
     Scenario(10, 20, 2, 2500, 0.5, 0.5, 0.7, 0, 1.00),
     Scenario(11, 200, 10, 8000, 1.2, 1.0, 1.2, 20, 0.85),
@@ -94,15 +94,15 @@ def schedule_block(official: dict, start: datetime, end: datetime) -> dict:
     return {
         "change": (
             "Postponed from about noon CT on Friday, Nov 20, 2026. "
-            "The date may be Wednesday, Nov 25, Thursday, Nov 26, or Friday, Nov 27, 2026. "
-            "The exact clock time is still unannounced."
+            "The planned detonation is Wednesday, Nov 25, 2026 at 9:00 AM CT. "
+            "Thursday and Friday are fallback scenarios."
         ),
         "change_basis": (
             "CBS Chicago reported the postponement and attributed it to the Army. "
             "The lines below are whatever the latest page retrieval actually contained. "
             "If they disagree with this sentence, believe the agency page."
         ),
-        "ensemble_center_chicago": stamp(release_local(12)),
+        "ensemble_center_chicago": stamp(release_local(PLANNED_RELEASE_HOUR_CT)),
         "ensemble_window_chicago": f"{stamp(start)} through {stamp(end)}",
         "fetched_mentions": mentions,
     }
@@ -205,7 +205,7 @@ def _simulate_day(
     n_particles: int,
     fetch_skipped: list[dict],
 ) -> dict:
-    """One 10:00 AM–2:00 PM CT release window. Models that end too soon are dropped for this day only."""
+    """One day of release scenarios. Models that end too soon are dropped for this day only."""
     weekday, label = _day_label(day)
     window_start = release_local(min(item.hour for item in scenarios), day)
     window_end = release_local(max(item.hour for item in scenarios), day) + timedelta(hours=hours)
@@ -246,7 +246,7 @@ def _simulate_day(
                 f"{stamp(window_start)} through {stamp(release_local(max(item.hour for item in scenarios), day))}"
             ),
             "narrative": (
-                f"No forecast in this run reaches the {label} 10:00 AM–2:00 PM CT window "
+                f"No forecast in this run reaches the {label} release window "
                 "through the 8 hours after the last release. "
                 "Overlap counts are not a measurement of lead and not a concentration."
             ),
@@ -520,7 +520,10 @@ def build_run(
         _simulate_day(
             datasets,
             day,
-            scenarios=scenarios,
+            scenarios=(
+                tuple(item._replace(hour=PLANNED_RELEASE_HOUR_CT) for item in scenarios)
+                if day == EVENT_DATE else scenarios
+            ),
             hours=hours,
             physics=physics,
             seed=seed,
@@ -569,8 +572,8 @@ def build_run(
             "release_window_chicago": monday["release_window_chicago"],
             "release_window_note": (
                 "The Friday, Nov 20, about-noon CT plan was postponed. "
-                "The date may be Wednesday, Nov 25, Thursday, Nov 26, or Friday, Nov 27. "
-                "Each day is screened from 10:00 AM to 2:00 PM CT because the clock time is still unannounced. "
+                "The planned detonation is Wednesday, Nov 25 at 9:00 AM CT. "
+                "Thursday and Friday are screened from 10:00 AM to 2:00 PM CT as fallback scenarios. "
                 "The map defaults to Wednesday. Read the official section for the latest agency wording."
             ),
             "simulation_hours_after_release": hours,
@@ -608,12 +611,12 @@ def build_run(
             "varied": [
                 "meteorology (model and, when available, an older GFS cycle)",
                 "wind direction and speed perturbations",
-                "release time inside the daytime window",
+                "release time on fallback days",
                 "release height",
                 "particle diameter and density",
                 "release point inside the installation",
                 "dry deposition, wet removal, and mixing scales",
-                "which afternoon the release is on (Wednesday Nov 25, Thursday Nov 26, or Friday Nov 27)",
+                "release day (Wednesday Nov 25, Thursday Nov 26, or Friday Nov 27)",
             ],
             "members": monday["members"],
         },

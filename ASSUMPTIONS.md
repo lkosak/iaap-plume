@@ -17,7 +17,7 @@ The collapsed panel "Historical wind context (climatology, not a forecast)" is E
 ## When particles are released
 
 - The date used for releases is **23 November 2026**.
-- The Friday, Nov 20, about-noon CT plan was postponed to Monday, Nov 23 (reported by CBS Chicago and attributed to the Army); with no detonation through Tuesday, Nov 24, the screened days moved to Wednesday, Nov 25 through Friday, Nov 27. Members are centered on **noon America/Chicago**, with a window of **10:00, 11:00, 12:00 (twice), 13:00, and 14:00** because the clock time can still change. The dashboard repeats that schedule change and shows whatever the latest official-page retrieval actually said.
+- The planned detonation is **Wednesday, Nov 25 at 9:00 AM America/Chicago**. Thursday and Friday are modeled as fallback days. The dashboard also shows the latest retrieved official wording.
 - The two detonations described by the Army are treated as one release. A gap of minutes is smaller than the grid cell.
 - Each member is followed for **8 hours**. That is longer than the Army's statement that visible dust may linger on the order of an hour, because smaller particles can stay aloft. It is still only a same-day regional window.
 
@@ -82,7 +82,7 @@ Six release scenarios are crossed with every meteorological dataset that covers 
 - 500 particles per member on a full run (tests use fewer).
 - The random seed is fixed (`20261123` plus a member offset) so the same inputs can be rerun.
 - The map grid is 0.08° (about 7–9 km): 32.16–49.44 N, 102.64–79.84 W, about 960 km from the installation in each direction.
-- The same ensemble is run for Wednesday, Nov 25, Thursday, Nov 26, and Friday, Nov 27, each day from 10:00 AM to 2:00 PM CT, because the detonation date is unannounced. A model that does not reach that day's window is left out of that day only.
+- All Wednesday ensemble members use the planned 9:00 AM CT release. The times in the table apply to the Thursday and Friday fallback scenarios. A model that does not reach a day’s window is left out of that day only.
 
 ## What is deliberately not assumed
 

@@ -177,7 +177,8 @@ export function Dashboard() {
             </Button>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-[#3d3832]">
-            Each window is 10:00 AM–2:00 PM CT, followed for 8 hours. The exact detonation time is unannounced.
+            The planned detonation is Wednesday, Nov 25 at 9:00 AM CT.
+            {day ? ` This run modeled ${day.release_window_chicago}.` : ""}
             {day ? ` This day uses ${day.n_members} ensemble members.` : " This archived run has no separate window for the selected day."}
             {day && day.n_members === 0 ? ` No model in this run reaches ${DAY_NAMES[releaseDay] ?? "that day"} evening.` : ""}
           </p>
@@ -313,7 +314,7 @@ function TrajectoryCard({ run, releaseDay }: { run: Run; releaseDay: string }) {
           </p>
         ) : null}
         {hysplit.real_hysplit && !mondayOnlyNote ? (
-          <p className="mt-2">{tracks.length} trajectories from 50, 250, and 500 m AGL across 10:00 AM–2:00 PM CT.</p>
+          <p className="mt-2">{tracks.length} trajectories from 50, 250, and 500 m AGL.</p>
         ) : hysplit.real_hysplit ? null : (
           <p className="mt-2">{hysplit.reason}</p>
         )}

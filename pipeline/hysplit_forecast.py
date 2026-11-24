@@ -1,7 +1,7 @@
 """Attach real HYSPLIT trajectories without blocking the ensemble archive.
 
 The screening job sets SKIP_HYSPLIT=1. This command downloads the smallest
-ARL forecast that covers 16:00–20:00 UTC on 23 November 2026 (10 AM–2 PM CT),
+ARL forecast that covers the planned release and subsequent trajectory window,
 in the order NAM 12 km, HRRR, then the 1-degree GFS file, and writes the
 trajectories onto the newest archived run.
 """
@@ -10,16 +10,13 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pipeline.config import EVENT_DATE, HYSPLIT_TRAJECTORY_LABEL, RELEASE_DATES
-from pipeline.hysplit_traj import build_trajectories
+from pipeline.hysplit_traj import build_trajectories, trajectory_window
 from pipeline.timeutil import iso
 
-# 10:00 AM–2:00 PM CT on the event date, fixed as 16:00–20:00 UTC.
-RELEASE_WINDOW_START = datetime(EVENT_DATE.year, EVENT_DATE.month, EVENT_DATE.day, 16, tzinfo=timezone.utc)
-RELEASE_WINDOW_END = RELEASE_WINDOW_START + timedelta(hours=4)
 # Large enough for the ~1.4 GB GFS file and a NAM 12 km file. Not for a 10 GB HRRR bundle.
 DEDICATED_MAX_BYTES = 2 * 1024 * 1024 * 1024
 DEDICATED_DEADLINE_SECONDS = 18 * 60
@@ -27,13 +24,14 @@ PRIORITY = ("NAM", "HRRR", "GFS")
 
 
 def compute(met_dir: Path) -> dict:
+    start, end = trajectory_window()
     product = build_trajectories(
         met_dir,
         priority=PRIORITY,
         max_bytes=DEDICATED_MAX_BYTES,
         deadline_seconds=DEDICATED_DEADLINE_SECONDS,
-        need_start=RELEASE_WINDOW_START,
-        need_end=RELEASE_WINDOW_END,
+        need_start=start,
+        need_end=end,
     )
     product["attached_at"] = iso(datetime.now(timezone.utc))
     if product.get("real_hysplit"):

@@ -20,6 +20,7 @@ from pipeline.config import (
     HYSPLIT_HEIGHTS_M,
     HYSPLIT_RELEASE_HOURS_CT,
     HYSPLIT_TRAJECTORY_LABEL,
+    PLANNED_RELEASE_HOUR_CT,
     RELEASE_DATES,
     SIM_HOURS,
     SOURCE_LAT,
@@ -29,7 +30,7 @@ from pipeline.hysplit import locate_executables, parse_tdump, run_executable, wr
 from pipeline.timeutil import iso, stamp
 
 CHI = ZoneInfo("America/Chicago")
-# Five release times. Each hyts_std call has to finish inside this, and the
+# Each hyts_std call has to finish inside this, and the
 # whole set has to finish inside the budget, or the layer is marked unavailable.
 TRAJECTORY_TIMEOUT_SECONDS = 90
 TRAJECTORY_BUDGET_SECONDS = 900
@@ -39,7 +40,8 @@ EXTRA_DAYS = RELEASE_DATES[1:]
 def release_times(day=None) -> list[datetime]:
     when = day or EVENT_DATE
     times = []
-    for hour in HYSPLIT_RELEASE_HOURS_CT:
+    hours = (PLANNED_RELEASE_HOUR_CT,) if when == EVENT_DATE else HYSPLIT_RELEASE_HOURS_CT
+    for hour in hours:
         local = datetime(when.year, when.month, when.day, hour, tzinfo=CHI)
         times.append(local.astimezone(timezone.utc))
     return times

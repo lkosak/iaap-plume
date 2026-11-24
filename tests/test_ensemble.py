@@ -33,7 +33,7 @@ def _run(datasets, **kwargs):
     return build_run(datasets, **defaults)
 
 
-def test_scenarios_are_centered_on_noon_monday():
+def test_wednesday_uses_planned_release_and_fallbacks_span_midday():
     hours = [item.hour for item in SCENARIOS]
     assert min(hours) >= 10
     assert max(hours) <= 14
@@ -46,9 +46,11 @@ def test_scenarios_are_centered_on_noon_monday():
         n_particles=4,
         hours=1,
     )
-    assert "12:00 PM" in run["schedule"]["ensemble_center_chicago"]
-    assert "10:00 AM" in run["schedule"]["ensemble_window_chicago"]
-    assert "2:00 PM" in run["schedule"]["ensemble_window_chicago"]
+    assert "9:00 AM" in run["schedule"]["ensemble_center_chicago"]
+    assert all("9:00 AM" in member["release_local"] for member in run["release_days"]["2026-11-25"]["members"])
+    for day in ("2026-11-26", "2026-11-27"):
+        window = run["release_days"][day]["release_window_chicago"]
+        assert "10:00 AM" in window and "2:00 PM" in window
     assert "Nov 20" in run["schedule"]["change"]
     assert "Nov 25" in run["schedule"]["change"]
 
@@ -126,8 +128,8 @@ def test_all_release_days_are_stored_and_a_short_model_drops_later_days():
         assert "nearest_overlap_km" in day["receptor"]
         assert day["grid"]["encoding"] == "sparse"
         assert day["grid"]["cells"]
-    # Wednesday 2 PM CT plus 8 h is 04:00 UTC on Nov 26, before the ticker stops.
-    assert UPDATE_UNTIL_UTC >= "2026-11-26T04:00:00"
+    # Wednesday 9 AM CT plus 8 h is 23:00 UTC on Nov 25, before the ticker stops.
+    assert UPDATE_UNTIL_UTC >= "2026-11-25T23:00:00"
     # Friday 2 PM CT plus 8 h is 04:00 UTC on Nov 28, before the ticker stops.
     assert UPDATE_UNTIL_UTC >= "2026-11-28T04:00:00"
     short_start = int(datetime(2026, 11, 25, 12, tzinfo=timezone.utc).timestamp())
