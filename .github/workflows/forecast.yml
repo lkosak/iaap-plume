@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   schedule:
-    # Every two hours. The snapshot itself stops after 24 Nov 2026 CT
+    # Every two hours. The snapshot itself stops after 27 Nov 2026 CT
     # (2026-11-25 06:00 UTC). Newest HRRR and RRFS cycles are requested on
     # each run and kept only when they cover the Monday release window.
     - cron: "10 */2 * * *"
@@ -34,12 +34,12 @@ jobs:
       - id: window
         run: |
           now=$(date -u +%s)
-          deadline=$(date -u -d '2026-11-26 06:00:00 UTC' +%s)
+          deadline=$(date -u -d '2026-11-28 06:00:00 UTC' +%s)
           if [ "$now" -lt "$deadline" ]; then
             echo "open=true" >> "$GITHUB_OUTPUT"
           else
             echo "open=false" >> "$GITHUB_OUTPUT"
-            echo "Past 24 Nov 2026 CT. Scheduled updates stop. Manual dispatch still deploys."
+            echo "Past 27 Nov 2026 CT. Scheduled updates stop. Manual dispatch still deploys."
           fi
 
   snapshot:
