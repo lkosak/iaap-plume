@@ -53,7 +53,7 @@ def test_u16_roundtrip_keeps_the_no_arrival_flag():
     assert list(unpacked) == [0, 90, 65535]
 
 
-def test_deadline_stops_after_nov_25_chicago():
-    assert past_deadline(datetime(2026, 11, 26, 7, tzinfo=timezone.utc)) is True
-    assert past_deadline(datetime(2026, 11, 25, 7, tzinfo=timezone.utc)) is False
+def test_deadline_stops_after_nov_27_chicago():
+    assert past_deadline(datetime(2026, 11, 28, 7, tzinfo=timezone.utc)) is True
+    assert past_deadline(datetime(2026, 11, 26, 7, tzinfo=timezone.utc)) is False
     assert past_deadline(datetime(2026, 11, 23, 18, tzinfo=timezone.utc)) is False
