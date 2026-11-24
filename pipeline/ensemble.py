@@ -94,7 +94,7 @@ def schedule_block(official: dict, start: datetime, end: datetime) -> dict:
     return {
         "change": (
             "Postponed from about noon CT on Friday, Nov 20, 2026. "
-            "The date may be Monday, Nov 23, Tuesday, Nov 24, or Wednesday, Nov 25, 2026. "
+            "The date may be Monday, Nov 23, Tuesday, Nov 24, Wednesday, Nov 25, Thursday, Nov 26, or Friday, Nov 27, 2026. "
             "The exact clock time is still unannounced."
         ),
         "change_basis": (
@@ -114,7 +114,7 @@ def release_local(hour: int, day=None) -> datetime:
 
 
 def _day_label(day) -> tuple[str, str]:
-    names = {23: ("Monday", "Mon Nov 23"), 24: ("Tuesday", "Tue Nov 24"), 25: ("Wednesday", "Wed Nov 25")}
+    names = {23: ("Monday", "Mon Nov 23"), 24: ("Tuesday", "Tue Nov 24"), 25: ("Wednesday", "Wed Nov 25"), 26: ("Thursday", "Thu Nov 26"), 27: ("Friday", "Fri Nov 27")}
     return names.get(day.day, (day.strftime("%A"), day.isoformat()))
 
 
@@ -569,7 +569,7 @@ def build_run(
             "release_window_chicago": monday["release_window_chicago"],
             "release_window_note": (
                 "The Friday, Nov 20, about-noon CT plan was postponed. "
-                "The date may be Monday, Nov 23, Tuesday, Nov 24, or Wednesday, Nov 25. "
+                "The date may be Monday, Nov 23, Tuesday, Nov 24, Wednesday, Nov 25, Thursday, Nov 26, or Friday, Nov 27. "
                 "Each day is screened from 10:00 AM to 2:00 PM CT because the clock time is still unannounced. "
                 "The map defaults to Monday. Read the official section for the latest agency wording."
             ),
@@ -613,7 +613,7 @@ def build_run(
                 "particle diameter and density",
                 "release point inside the installation",
                 "dry deposition, wet removal, and mixing scales",
-                "which afternoon the release is on (Monday Nov 23, Tuesday Nov 24, or Wednesday Nov 25)",
+                "which afternoon the release is on (Monday Nov 23 through Friday Nov 27)",
             ],
             "members": monday["members"],
         },
