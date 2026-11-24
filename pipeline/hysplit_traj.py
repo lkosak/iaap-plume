@@ -1,7 +1,7 @@
 """HYSPLIT trajectory ensemble on ARL forecast meteorology.
 
 The screening footprint is not modified. A missing executable or a forecast
-that does not cover Monday is recorded, and the snapshot still archives.
+that does not cover the base day is recorded, and the snapshot still archives.
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ def build_trajectories(
     valid_end = datetime.fromisoformat(choice.valid_end)
     extra_tracks: dict[str, list[dict]] = {}
     extra_reasons: dict[str, str] = {}
-    covered: list[str] = ["Monday"]
+    covered: list[str] = ["Wednesday"]
     for day in EXTRA_DAYS:
         name = day.strftime("%A")
         tracks_for_day: list[dict] = []

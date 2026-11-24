@@ -5,8 +5,8 @@ on:
     branches: [main]
   schedule:
     # Every two hours. The snapshot itself stops after 27 Nov 2026 CT
-    # (2026-11-25 06:00 UTC). Newest HRRR and RRFS cycles are requested on
-    # each run and kept only when they cover the Monday release window.
+    # (2026-11-28 06:00 UTC). Newest HRRR and RRFS cycles are requested on
+    # each run and kept only when they cover the Wednesday release window.
     - cron: "10 */2 * * *"
   workflow_dispatch:
 

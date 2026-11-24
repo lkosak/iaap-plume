@@ -2,14 +2,14 @@
 # Keep Forecast archive refreshing every 2 hours without relying on GitHub cron.
 # A job cannot run for the whole window (the limit is 6 hours), so this process
 # dispatches forecast.yml on a 2-hour cadence and, before it exits, dispatches
-# the next ticker. The chain stops after 2026-11-25 06:00Z.
+# the next ticker. The chain stops after 2026-11-28 06:00Z.
 set -euo pipefail
 
 MODE="${MODE:-live}"
 HANDOFF="${HANDOFF:-false}"
 INTERVAL="${INTERVAL_SECONDS:-7200}"
 BUDGET="${HANDOFF_SECONDS:-20400}"
-DEADLINE="${TICKER_DEADLINE:-2026-11-25 06:00:00 UTC}"
+DEADLINE="${TICKER_DEADLINE:-2026-11-28 06:00:00 UTC}"
 REPO="${GITHUB_REPOSITORY:-lkosak/iaap-plume}"
 RUN_ID="${GITHUB_RUN_ID:-0}"
 

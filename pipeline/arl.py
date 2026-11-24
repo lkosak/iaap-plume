@@ -35,7 +35,7 @@ _SPLIT = (
     (re.compile(r"^hysplit\.t(\d{2})z\.namf$"), "NAM", 0, 84),
     (re.compile(r"^hysplit\.t(\d{2})z\.namsf$"), "NAM", 0, 48),
     (re.compile(r"^hysplit\.t(\d{2})z\.nam12$"), "NAM", 0, 48),
-    # 1-degree GFS, about 1.4 GB and long enough to cover Monday.
+    # 1-degree GFS, about 1.4 GB and long enough to cover the release window.
     # The 0.25-degree files are several GB each, so they are not the fallback.
     (re.compile(r"^hysplit\.t(\d{2})z\.gfsf$"), "GFS", 0, 240),
 )

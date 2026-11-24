@@ -293,9 +293,9 @@ function StatusChips({ run }: { run: Run }) {
 function TrajectoryCard({ run, releaseDay }: { run: Run; releaseDay: string }) {
   const hysplit = run.hysplit;
   if (!hysplit) return null;
-  const tracks = (hysplit.trajectories ?? []).filter((track) => (track.release_day ? track.release_day === releaseDay : releaseDay === MONDAY));
-  const mondayTracks = (hysplit.trajectories ?? []).filter((track) => (track.release_day ? track.release_day === MONDAY : true));
-  const mondayOnlyNote = releaseDay !== MONDAY && mondayTracks.length > 0 && tracks.length === 0;
+  const tracks = (hysplit.trajectories ?? []).filter((track) => (track.release_day ? track.release_day === releaseDay : releaseDay === WEDNESDAY));
+  const mondayTracks = (hysplit.trajectories ?? []).filter((track) => (track.release_day ? track.release_day === WEDNESDAY : true));
+  const mondayOnlyNote = releaseDay !== WEDNESDAY && mondayTracks.length > 0 && tracks.length === 0;
   const dayName = DAY_NAMES[releaseDay] ?? "that day";
   return (
     <Card>
@@ -305,7 +305,7 @@ function TrajectoryCard({ run, releaseDay }: { run: Run; releaseDay: string }) {
       <CardContent className="text-sm leading-relaxed">
         <p>{hysplit.note}</p>
         {mondayOnlyNote ? (
-          <p className="mt-2">The HYSPLIT trajectories in this product are Monday-only. The shaded footprint for {dayName} is the screening ensemble, labeled NOT HYSPLIT.</p>
+          <p className="mt-2">The HYSPLIT trajectories in this product are Wednesday-only. The shaded footprint for {dayName} is the screening ensemble, labeled NOT HYSPLIT.</p>
         ) : null}
         {hysplit.met ? (
           <p className="mt-2">

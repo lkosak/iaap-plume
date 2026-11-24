@@ -10,7 +10,7 @@ WORKFLOW = ROOT / ".github" / "workflows" / "forecast-ticker.yml"
 FORECAST = ROOT / ".github" / "workflows" / "forecast.yml"
 
 
-def _run(mode, handoff="false", interval="2", budget="5", deadline="2026-11-25 06:00:00 UTC", others="0"):
+def _run(mode, handoff="false", interval="2", budget="5", deadline="2026-11-28 06:00:00 UTC", others="0"):
     log = Path(os.environ.get("TMPDIR", "/tmp")) / f"ticker-{mode}-{os.getpid()}.log"
     if log.exists():
         log.unlink()
@@ -139,6 +139,6 @@ def test_workflow_keeps_one_ticker_and_forecast_keeps_its_cron():
     assert "cancel-in-progress: false" in ticker
     assert "forecast-ticker" in ticker
     assert 'cron: "25 */2 * * *"' in ticker
-    assert "2026-11-25 06:00:00 UTC" in (ROOT / "scripts" / "forecast_ticker.sh").read_text()
+    assert "2026-11-28 06:00:00 UTC" in (ROOT / "scripts" / "forecast_ticker.sh").read_text()
     assert 'cron: "10 */2 * * *"' in forecast
     assert "cancel-in-progress: true" in forecast

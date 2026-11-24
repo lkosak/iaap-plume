@@ -396,7 +396,7 @@ def dataset_from_payloads(
 def uniform_met(u: float, v: float, *, lat: float = 41.0, lon: float = -91.5, hours: int = 36, blh: float = 800.0, precip: float = 0.0, t0: int | None = None) -> MetDataset:
     """Spatially uniform wind, for tests and for nothing the dashboard would call a forecast."""
     if t0 is None:
-        t0 = int(datetime(2026, 11, 23, 12, tzinfo=timezone.utc).timestamp())
+        t0 = int(datetime(2026, 11, 25, 12, tzinfo=timezone.utc).timestamp())
     times = np.arange(t0, t0 + hours * 3600 + 1, 3600, dtype=np.int64)
     n_time = len(times)
     return MetDataset(

@@ -52,8 +52,8 @@ class Scenario(NamedTuple):
     speed_factor: float
 
 
-# Centered on noon CT Monday. The Friday noon plan was postponed to Nov 23;
-# the Monday clock time can still move, so members span 10:00–14:00 with
+# Centered on noon CT Wednesday. The Friday noon plan was postponed, most
+# recently to Nov 25; the clock time can still move, so members span 10:00–14:00 with
 # two of the six releases at noon.
 SCENARIOS = (
     Scenario(10, 20, 2, 2500, 0.5, 0.5, 0.7, 0, 1.00),
@@ -94,7 +94,7 @@ def schedule_block(official: dict, start: datetime, end: datetime) -> dict:
     return {
         "change": (
             "Postponed from about noon CT on Friday, Nov 20, 2026. "
-            "The date may be Monday, Nov 23, Tuesday, Nov 24, Wednesday, Nov 25, Thursday, Nov 26, or Friday, Nov 27, 2026. "
+            "The date may be Wednesday, Nov 25, Thursday, Nov 26, or Friday, Nov 27, 2026. "
             "The exact clock time is still unannounced."
         ),
         "change_basis": (
@@ -532,7 +532,7 @@ def build_run(
     monday = next(item for item in days if item["date"] == EVENT_DATE.isoformat())
     if not monday["covered"]:
         detail = "; ".join(f"{item['label']} {item['cycle']}: {item['reason']}" for item in monday["skipped"])
-        raise RuntimeError(f"No meteorological dataset covers the Monday release window. {detail}")
+        raise RuntimeError(f"No meteorological dataset covers the Wednesday release window. {detail}")
     hysplit = hysplit_check if hysplit_check is not None else check_hysplit()
     from datetime import timezone as utc_tz
 
@@ -569,9 +569,9 @@ def build_run(
             "release_window_chicago": monday["release_window_chicago"],
             "release_window_note": (
                 "The Friday, Nov 20, about-noon CT plan was postponed. "
-                "The date may be Monday, Nov 23, Tuesday, Nov 24, Wednesday, Nov 25, Thursday, Nov 26, or Friday, Nov 27. "
+                "The date may be Wednesday, Nov 25, Thursday, Nov 26, or Friday, Nov 27. "
                 "Each day is screened from 10:00 AM to 2:00 PM CT because the clock time is still unannounced. "
-                "The map defaults to Monday. Read the official section for the latest agency wording."
+                "The map defaults to Wednesday. Read the official section for the latest agency wording."
             ),
             "simulation_hours_after_release": hours,
             "step_seconds": DT_SECONDS,
@@ -613,7 +613,7 @@ def build_run(
                 "particle diameter and density",
                 "release point inside the installation",
                 "dry deposition, wet removal, and mixing scales",
-                "which afternoon the release is on (Monday Nov 23 through Friday Nov 27)",
+                "which afternoon the release is on (Wednesday Nov 25, Thursday Nov 26, or Friday Nov 27)",
             ],
             "members": monday["members"],
         },

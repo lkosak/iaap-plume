@@ -4,7 +4,7 @@ Every number below is an assumption of this screening ensemble. None of them is 
 
 The colored footprint on every run is **NOT HYSPLIT**. When the trajectory layer is present it is labeled HYSPLIT trajectories (real HYSPLIT, forecast met) and is a separate NOAA HYSPLIT calculation. It is not a concentration.
 
-The collapsed panel "Historical wind context (climatology, not a forecast)" is ERA5 reanalysis for 9 November–7 December, 2000–2025. It describes how often the wind in that calendar window has blown toward Fairfield. It is not a forecast for 23 November 2026, not a plume, and not an exposure estimate. The Monday forecast layers take precedence.
+The collapsed panel "Historical wind context (climatology, not a forecast)" is ERA5 reanalysis for 9 November–7 December, 2000–2025. It describes how often the wind in that calendar window has blown toward Fairfield. It is not a forecast for 23 November 2026, not a plume, and not an exposure estimate. The forecast layers take precedence.
 
 ## Place
 
@@ -17,7 +17,7 @@ The collapsed panel "Historical wind context (climatology, not a forecast)" is E
 ## When particles are released
 
 - The date used for releases is **23 November 2026**.
-- The Friday, Nov 20, about-noon CT plan was postponed to Monday, Nov 23 (reported by CBS Chicago and attributed to the Army). Members are centered on **noon America/Chicago**, with a window of **10:00, 11:00, 12:00 (twice), 13:00, and 14:00** because the Monday clock time can still change. The dashboard repeats that schedule change and shows whatever the latest official-page retrieval actually said.
+- The Friday, Nov 20, about-noon CT plan was postponed to Monday, Nov 23 (reported by CBS Chicago and attributed to the Army); with no detonation through Tuesday, Nov 24, the screened days moved to Wednesday, Nov 25 through Friday, Nov 27. Members are centered on **noon America/Chicago**, with a window of **10:00, 11:00, 12:00 (twice), 13:00, and 14:00** because the clock time can still change. The dashboard repeats that schedule change and shows whatever the latest official-page retrieval actually said.
 - The two detonations described by the Army are treated as one release. A gap of minutes is smaller than the grid cell.
 - Each member is followed for **8 hours**. That is longer than the Army's statement that visible dust may linger on the order of an hour, because smaller particles can stay aloft. It is still only a same-day regional window.
 
@@ -37,7 +37,7 @@ The collapsed panel "Historical wind context (climatology, not a forecast)" is E
 - Winds, boundary-layer height, and precipitation come from [Open-Meteo](https://open-meteo.com/), not from NOAA ARL files.
 - Model ids requested: `ncep_hrrr_conus` (HRRR), `ncep_rrfs_conus` (RRFS), and `gfs_seamless` (GFS). NAM is not used; Open-Meteo lists it as discontinued on 2026-11-01. RRFS is the regional model Open-Meteo offers in its place.
 - Wind speed is requested in meters per second (`wind_speed_unit=ms`). If a response still says km/h, speeds are divided by 3.6.
-- A dataset is used only when its winds cover the release window through the end of the 8-hour simulations. HRRR's native horizon is short. If the downloaded HRRR field does not reach Monday, that run says HRRR was skipped. Later scheduled runs can pick it up once it does.
+- A dataset is used only when its winds cover the release window through the end of the 8-hour simulations. HRRR's native horizon is short. If the downloaded HRRR field does not reach the release day, that run says HRRR was skipped. Later scheduled runs can pick it up once it does.
 - Extra meteorology, when the download succeeds: a GFS cycle about 12 hours older (`run=` on the forecast API) and the Open-Meteo `previous_day1` GFS field (the forecast made about a day earlier for the same valid time).
 - Points are a 5×5 lattice from 39.6–42.8 N and 93.6–89.6 W. Wind at a particle is an inverse-distance blend of those points, then a linear blend between wind levels (10 m, 80 m, and 925 and 850 hPa when those levels exist). Pressure-level heights are geopotential height minus the point's elevation.
 - Resolved vertical wind from the forecast is not used. Vertical motion is mixing plus gravitational settling.
@@ -82,7 +82,7 @@ Six release scenarios are crossed with every meteorological dataset that covers 
 - 500 particles per member on a full run (tests use fewer).
 - The random seed is fixed (`20261123` plus a member offset) so the same inputs can be rerun.
 - The map grid is 0.08° (about 7–9 km): 32.16–49.44 N, 102.64–79.84 W, about 960 km from the installation in each direction.
-- The same ensemble is run for Monday, Nov 23 through Friday, Nov 27, each day from 10:00 AM to 2:00 PM CT, because the detonation date is unannounced. A model that does not reach that day's window is left out of that day only.
+- The same ensemble is run for Wednesday, Nov 25, Thursday, Nov 26, and Friday, Nov 27, each day from 10:00 AM to 2:00 PM CT, because the detonation date is unannounced. A model that does not reach that day's window is left out of that day only.
 
 ## What is deliberately not assumed
 

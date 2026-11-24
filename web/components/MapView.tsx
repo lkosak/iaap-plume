@@ -147,7 +147,7 @@ export function MapView({ run, layer, hindcast, hindcastField, releaseDay, onPic
     }
     if (layer === "hysplit") {
       const tracks = (run.hysplit?.trajectories ?? []).filter((track) => {
-        if (!track.release_day) return releaseDay === "2026-11-23";
+        if (!track.release_day) return releaseDay === "2026-11-25";
         return track.release_day === releaseDay;
       });
       for (const track of tracks) {

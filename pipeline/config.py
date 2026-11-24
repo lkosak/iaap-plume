@@ -14,9 +14,9 @@ FAIRFIELD_NAME = "Fairfield, Iowa"
 FAIRFIELD_LAT = 41.00761
 FAIRFIELD_LON = -91.96369
 
-EVENT_DATE = date(2026, 11, 23)
-# The clock time is unannounced. Screen all five afternoons the same way.
-RELEASE_DATES = (date(2026, 11, 23), date(2026, 11, 24), date(2026, 11, 25), date(2026, 11, 26), date(2026, 11, 27))
+EVENT_DATE = date(2026, 11, 25)
+# The clock time is unannounced. Screen all three afternoons the same way.
+RELEASE_DATES = (date(2026, 11, 25), date(2026, 11, 26), date(2026, 11, 27))
 TIMEZONE = "America/Chicago"
 
 # Unattended forecast updates stop after the evening of Nov 27 CT.
