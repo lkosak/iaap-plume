@@ -47,6 +47,7 @@ export function Dashboard() {
   const [layer, setLayer] = useState<LayerName>("air");
   const [hindcast, setHindcast] = useState<Hindcast | null>(null);
   const [trajectoryFile, setTrajectoryFile] = useState<HysplitTrajectories | null>(null);
+  const [hindcastHour, setHindcastHour] = useState("");
   const [hindcastField, setHindcastField] = useState<"air" | "deposition">("air");
   const [picked, setPicked] = useState<CellReadout | null>(null);
   const [releaseDay, setReleaseDay] = useState(WEDNESDAY);
@@ -126,6 +127,11 @@ export function Dashboard() {
         event: { ...run.event, release_window_chicago: day.release_window_chicago },
       }
     : run;
+  const hourly = hindcast?.grid?.hourly;
+  const selectedHour = hourly?.find((hour) => hour.end_utc === hindcastHour);
+  const mappedHindcast = hindcast?.grid && selectedHour
+    ? { ...hindcast, grid: { ...hindcast.grid, ...selectedHour } }
+    : hindcast;
   const displayRun = dayRun && hysplit ? { ...dayRun, hysplit } : dayRun;
 
   return (
@@ -201,10 +207,26 @@ export function Dashboard() {
                 </Button>
               ))}
             </div>
-            <MapView run={displayRun} layer={layer} hindcast={hindcast} hindcastField={hindcastField} releaseDay={releaseDay} onPick={setPicked} />
+            <MapView run={displayRun} layer={layer} hindcast={mappedHindcast} hindcastField={hindcastField} releaseDay={releaseDay} onPick={setPicked} />
             <Legend layer={layer} members={displayRun.ensemble.n_members} hindcastField={hindcastField} />
             {layer === "hindcast" ? (
-              <div className="flex gap-2 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+                {hourly?.length ? (
+                  <label className="flex flex-wrap items-center gap-2 text-sm">
+                    Time window
+                    <select
+                      className="max-w-full rounded border bg-white px-2 py-1"
+                      value={selectedHour?.end_utc ?? ""}
+                      onChange={(event) => {
+                        setHindcastHour(event.target.value);
+                        setPicked(null);
+                      }}
+                    >
+                      <option value="">Peak across all hours</option>
+                      {hourly.map((hour) => <option key={hour.end_utc} value={hour.end_utc}>{hour.label}</option>)}
+                    </select>
+                  </label>
+                ) : null}
                 <Button size="sm" variant={hindcastField === "air" ? "default" : "outline"} onClick={() => setHindcastField("air")}>Hindcast air</Button>
                 <Button size="sm" variant={hindcastField === "deposition" ? "default" : "outline"} onClick={() => setHindcastField("deposition")}>Hindcast deposition</Button>
               </div>

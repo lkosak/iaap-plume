@@ -8,6 +8,7 @@ written into the archive.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -40,11 +41,12 @@ from pipeline.hysplit_traj import release_times
 from pipeline.timeutil import iso, stamp
 
 
-def normalize(values: np.ndarray) -> np.ndarray:
+def normalize(values: np.ndarray, peak: float | None = None) -> np.ndarray:
     """Map a field onto 0–100 by its own peak. A zero peak stays zero."""
     finite = np.where(np.isfinite(values), values, 0.0)
     finite = np.maximum(finite, 0.0)
-    peak = float(finite.max()) if finite.size else 0.0
+    if peak is None:
+        peak = float(finite.max()) if finite.size else 0.0
     if peak <= 0.0:
         return np.zeros(finite.shape, dtype=np.uint8)
     scaled = np.clip(np.rint(100.0 * finite / peak), 0, 100)
@@ -62,6 +64,42 @@ def accumulate(points: list[tuple[float, float, float]], grid: Grid) -> np.ndarr
         if 0 <= i < grid.nlat and 0 <= j < grid.nlon:
             field[i, j] = max(field[i, j], float(value))
     return field
+
+
+def hourly_grids(samples: dict[tuple[int, int], str], start: datetime, end: datetime) -> dict:
+    grid = Grid()
+    periods = []
+    stop = start + timedelta(hours=1)
+    while stop <= end:
+        key = (stop.timetuple().tm_yday, stop.hour)
+        if key not in samples and stop.hour == 0:
+            key = ((stop - timedelta(days=1)).timetuple().tm_yday, 24)
+        if key in samples:
+            columns = parse_hysplit_columns(samples[key])
+            air = [point for name, points in columns.items() if not name.endswith("00000") for point in points]
+            deposition = [point for name, points in columns.items() if name.endswith("00000") for point in points]
+            periods.append((stop, accumulate(air, grid), accumulate(deposition, grid)))
+        stop += timedelta(hours=1)
+    if not periods:
+        raise RuntimeError("HYSPLIT did not produce hourly samples in the requested window.")
+    air_peak = np.maximum.reduce([air for _, air, _ in periods])
+    dep_peak = np.maximum.reduce([dep for _, _, dep in periods])
+    air_max, dep_max = float(air_peak.max()), float(dep_peak.max())
+    return {
+        **grid.as_dict(),
+        "relative_air": pack_u8(normalize(air_peak, air_max)),
+        "relative_deposition": pack_u8(normalize(dep_peak, dep_max)),
+        "scale": "percent of the peak in this run",
+        "hourly": [
+            {
+                "end_utc": iso(stop),
+                "label": f"{stamp(stop - timedelta(hours=1))} to {stamp(stop)}",
+                "relative_air": pack_u8(normalize(air, air_max)),
+                "relative_deposition": pack_u8(normalize(dep, dep_max)),
+            }
+            for stop, air, dep in periods
+        ],
+    }
 
 
 def _product(reason: str, *, real: bool, met: dict | None = None, grid: dict | None = None) -> dict:
@@ -96,18 +134,7 @@ def build_hindcast(met_dir: Path | None = None) -> dict:
         return _product(str(exc), real=False)
     directory = Path(met_dir or "data/arl")
     local_files = [download(item, directory) for item in choice.files]
-    text, _same = _run_concentration(executable, converter, start, end, local_files)
-    columns = parse_hysplit_columns(text)
-    air_points: list[tuple[float, float, float]] = []
-    dep_points: list[tuple[float, float, float]] = []
-    for name, points in columns.items():
-        if name.endswith("00000"):
-            dep_points.extend(points)
-        else:
-            air_points.extend(points)
-    grid = Grid()
-    air = normalize(accumulate(air_points, grid))
-    deposition = normalize(accumulate(dep_points, grid))
+    samples = _run_concentration(executable, converter, start, end, local_files)
     return _product(
         "",
         real=True,
@@ -120,12 +147,7 @@ def build_hindcast(met_dir: Path | None = None) -> dict:
             "valid_end": choice.valid_end,
             "source": "NOAA ARL archive (HRRR or NAM12).",
         },
-        grid={
-            **grid.as_dict(),
-            "relative_air": pack_u8(air),
-            "relative_deposition": pack_u8(deposition),
-            "scale": "percent of the peak in this run",
-        },
+        grid=hourly_grids(samples, start, end),
     )
 
 
@@ -174,10 +196,10 @@ def _concentration_in(executable, converter, work: Path, start: datetime, end: d
             excerpt = f"{completed.stdout}\n{completed.stderr}"[-500:]
             raise RuntimeError(f"hycs_std exit {completed.returncode}: {excerpt}")
         air = _con2asc(converter, work, "-icdump", "-oconc", "-z")
-        text = _ascii_from(work, "conc")
-        if not text:
+        samples = _ascii_from(work, "conc")
+        if not samples:
             raise RuntimeError(f"con2asc produced no concentration text: {air.stdout[-300:]} {air.stderr[-300:]}")
-        return text, text
+        return samples
 
 
 def _con2asc(converter: Path, work: Path, *args: str):
@@ -197,18 +219,13 @@ def _con2asc(converter: Path, work: Path, *args: str):
     )
 
 
-def _ascii_from(work: Path, stem: str) -> str:
-    chunks = []
+def _ascii_from(work: Path, stem: str) -> dict[tuple[int, int], str]:
+    samples = {}
     for path in sorted(work.iterdir()):
-        if not path.is_file() or path.name == "cdump":
-            continue
-        if not path.name.lower().startswith(stem.lower()):
-            continue
-        try:
-            chunks.append(path.read_text(errors="replace"))
-        except OSError:
-            continue
-    return "\n".join(chunks)
+        match = re.fullmatch(rf"{re.escape(stem)}_(\d{{1,3}})_(\d{{1,2}})(?:\.txt)?", path.name, re.IGNORECASE)
+        if match and path.is_file():
+            samples[(int(match[1]), int(match[2]))] = path.read_text(errors="replace")
+    return samples
 
 
 def publish_hindcast(out_dir: Path, product: dict) -> Path | None:
@@ -247,10 +264,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Archive one post-event HYSPLIT hindcast.")
     parser.add_argument("--out", default="web/public/hindcast")
     args = parser.parse_args(argv)
-    today = datetime.now(timezone.utc).date()
-    if not (datetime(2026, 11, 24, tzinfo=timezone.utc).date() <= today <= datetime(2026, 11, 27, tzinfo=timezone.utc).date()):
-        print("Hindcast runs 24–27 Nov 2026, after archived meteorology for Nov 23 can exist.")
-        return 0
+    Path(args.out).mkdir(parents=True, exist_ok=True)
     product = build_hindcast()
     dest = publish_hindcast(Path(args.out), product)
     if dest is None:

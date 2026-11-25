@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import numpy as np
 
 from pipeline.encoding import pack_u8, unpack_u8
-from pipeline.hindcast import accumulate, normalize, publish_hindcast
+from pipeline.hindcast import _ascii_from, accumulate, hourly_grids, normalize, publish_hindcast
 from pipeline.hysplit import (
     check_hysplit,
     parse_concentration_ascii,
@@ -168,3 +168,19 @@ def test_triplet_parser_and_archive_round_trip(tmp_path):
     assert (tmp_path / "latest.json").exists()
     assert "post-event hindcast" in (tmp_path / "latest.json").read_text()
     assert publish_hindcast(tmp_path, empty_product("not yet")) is None
+
+
+def test_hindcast_hours_use_sample_end_and_share_peak(tmp_path):
+    header = "DAY HR LAT LON REL00000 REL00100\n"
+    (tmp_path / "conc_329_16").write_text(header + "329 16 40.23 -91.50 2 4\n")
+    (tmp_path / "conc_329_17").write_text(header + "329 17 40.23 -91.50 8 20\n")
+    start = datetime(2026, 11, 25, 15, tzinfo=timezone.utc)
+    end = datetime(2026, 11, 25, 17, tzinfo=timezone.utc)
+    grid = hourly_grids(_ascii_from(tmp_path, "conc"), start, end)
+    first, second = grid["hourly"]
+    assert first["end_utc"] == "2026-11-25T16:00:00Z"
+    assert "9:00 AM" in first["label"] and "10:00 AM" in first["label"]
+    cells = grid["nlat"] * grid["nlon"]
+    assert max(unpack_u8(first["relative_air"], cells)) == 20
+    assert max(unpack_u8(first["relative_deposition"], cells)) == 25
+    assert max(unpack_u8(second["relative_air"], cells)) == 100

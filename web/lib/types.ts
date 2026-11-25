@@ -45,6 +45,12 @@ export type Hindcast = {
     relative_air: string;
     relative_deposition: string;
     scale?: string;
+    hourly?: {
+      end_utc: string;
+      label: string;
+      relative_air: string;
+      relative_deposition: string;
+    }[];
   };
 };
 
