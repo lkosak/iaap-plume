@@ -360,6 +360,37 @@ function FairfieldCard({ run }: { run: Run }) {
         {rec.air_hits === 0 && rec.nearest_overlap_km != null ? (
           <p className="mt-2 text-sm">Nearest cell with any member is about {rec.nearest_overlap_km} km from Fairfield.</p>
         ) : null}
+        {rec.size_height_sensitivity?.length ? (
+          <details className="mt-3 text-sm">
+            <summary className="cursor-pointer font-semibold">Fairfield by particle size and release height</summary>
+            <p className="mt-2">Each cell shows weather runs reaching Fairfield in air / depositing there. All pairs use the same weather inputs, source point, and particle density (2,500 kg/m³). Counts are relative model results.</p>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full text-center text-xs">
+                <thead>
+                  <tr className="border-b">
+                    <th scope="col" className="p-1 text-left">Height</th>
+                    {[...new Set(rec.size_height_sensitivity.map((row) => row.diameter_um))].map((size) => (
+                      <th scope="col" key={size} className="p-1">{size} µm</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...new Set(rec.size_height_sensitivity.map((row) => row.height_m))].map((height) => (
+                    <tr key={height} className="border-b">
+                      <th scope="row" className="whitespace-nowrap p-1 text-left">{height} m</th>
+                      {rec.size_height_sensitivity?.filter((row) => row.height_m === height).map((row) => (
+                        <td key={row.diameter_um} className="whitespace-nowrap p-1">
+                          {row.air_hits}/{row.deposition_hits}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1 text-xs">Each pair uses {rec.size_height_sensitivity[0].n_members} weather runs.</p>
+          </details>
+        ) : null}
         <p className="mt-2 text-xs text-[#5c564e]">A zero is not a measurement of clean air. A nonzero count is not a measurement of lead.</p>
       </CardContent>
     </Card>

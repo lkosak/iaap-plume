@@ -65,6 +65,41 @@ SCENARIOS = (
 )
 
 
+SENSITIVITY_DIAMETERS_UM = (0.5, 2, 8, 10, 25)
+SENSITIVITY_HEIGHTS_M = (20, 30, 60, 150, 200, 300, 500)
+SENSITIVITY_DENSITY_KG_M3 = 2500
+
+
+def fairfield_sensitivity(datasets, *, release_time, hours, seed, n_particles, physics):
+    """Compare size and height with fixed source, density and random seed."""
+    end = release_time + timedelta(hours=hours)
+    usable = [dataset for dataset in datasets if dataset.covers(release_time, end)[0]]
+    if not usable:
+        return []
+    grid = Grid()
+    i, j = grid.index_scalar(FAIRFIELD_LAT, FAIRFIELD_LON)
+    rows = []
+    for height in SENSITIVITY_HEIGHTS_M:
+        for diameter in SENSITIVITY_DIAMETERS_UM:
+            spec = MemberSpec(
+                seed=seed, release_time=release_time, minute_origin=release_time,
+                release_lat=SOURCE_LAT, release_lon=SOURCE_LON, height_m=height,
+                diameter_m=diameter * 1e-6, density=SENSITIVITY_DENSITY_KG_M3,
+                wind_rotation_deg=0, wind_speed_factor=1, dep_scale=1, wet_scale=1,
+                turb_scale=1, n_particles=n_particles, hours=hours, dt=DT_SECONDS,
+            )
+            air = deposition = 0
+            for dataset in usable:
+                result = run_member(dataset, spec, grid, physics)
+                air += int(result["air_dwell"][i, j] > 0)
+                deposition += int(result["deposited"][i, j] > 0)
+            rows.append({
+                "height_m": height, "diameter_um": diameter,
+                "air_hits": air, "deposition_hits": deposition, "n_members": len(usable),
+            })
+    return rows
+
+
 def schedule_block(official: dict, start: datetime, end: datetime) -> dict:
     """Schedule the ensemble was built around, plus any dates the latest fetch mentioned."""
     mentions = []
@@ -549,6 +584,11 @@ def build_run(
             for key, value in item.items()
             if key not in {"dense", "covered", "window_start", "window_end_release"}
         }
+    sensitivity = fairfield_sensitivity(
+        datasets, release_time=release_local(PLANNED_RELEASE_HOUR_CT),
+        hours=hours, seed=seed, n_particles=n_particles, physics=physics,
+    )
+    public_days[EVENT_DATE.isoformat()]["receptor"]["size_height_sensitivity"] = sensitivity
     window_start = monday["window_start"]
     return {
         "schema_version": 2,

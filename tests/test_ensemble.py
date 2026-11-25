@@ -47,6 +47,15 @@ def test_wednesday_uses_planned_release_and_fallbacks_span_midday():
         hours=1,
     )
     assert "9:00 AM" in run["schedule"]["ensemble_center_chicago"]
+    sensitivity = run["receptor"]["size_height_sensitivity"]
+    sizes = {0.5, 2, 8, 10, 25}
+    heights = {20, 30, 60, 150, 200, 300, 500}
+    assert len(sensitivity) == len(sizes) * len(heights)
+    assert {(row["diameter_um"], row["height_m"]) for row in sensitivity} == {
+        (size, height) for size in sizes for height in heights
+    }
+    assert all(row["n_members"] == 1 for row in sensitivity)
+
     assert all("9:00 AM" in member["release_local"] for member in run["release_days"]["2026-11-25"]["members"])
     for day in ("2026-11-26", "2026-11-27"):
         window = run["release_days"][day]["release_window_chicago"]

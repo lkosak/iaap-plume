@@ -105,6 +105,13 @@ export type Run = {
     bearing_word: string;
     air_hits: number;
     air_neighbor_hits: number;
+    size_height_sensitivity?: {
+      height_m: number;
+      diameter_um: number;
+      air_hits: number;
+      deposition_hits: number;
+      n_members: number;
+    }[];
     deposition_hits: number;
     n_members: number;
     arrival_earliest_chicago: string | null;
