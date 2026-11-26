@@ -17,7 +17,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: forecast-archive
+  group: post-event-hindcast
   cancel-in-progress: false
 
 jobs:
@@ -46,6 +46,8 @@ jobs:
             echo "No hindcast files."
           else
             git commit -m "Archive post-event HYSPLIT hindcast"
+            git fetch --depth=20 origin main
+            git rebase FETCH_HEAD
             git push origin HEAD:main
           fi
       - uses: actions/setup-node@v4
