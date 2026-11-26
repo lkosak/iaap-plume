@@ -5,6 +5,12 @@
       "generated_at_chicago": "Nov 25, 2026, 9:52 PM CT (America/Chicago)",
       "label": "post-event hindcast",
       "met": "HRRR"
+    },
+    {
+      "id": "hindcast-20261126T235020Z",
+      "generated_at_chicago": "Nov 26, 2026, 5:50 PM CT (America/Chicago)",
+      "label": "post-event hindcast",
+      "met": "HRRR"
     }
   ]
 }
