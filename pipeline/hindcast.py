@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pipeline.arl import download, list_archive_names, select_archive
+from pipeline.arl import download, select_hindcast_archive
 from pipeline.config import (
     GRID_DLAT,
     GRID_DLON,
@@ -129,11 +129,14 @@ def build_hindcast(met_dir: Path | None = None) -> dict:
     start = release_times()[0]
     end = release_times()[-1] + timedelta(hours=SIM_HOURS)
     try:
-        choice = select_archive(list_archive_names(), start, end)
+        choice = select_hindcast_archive(start, end)
     except Exception as exc:  # noqa: BLE001
         return _product(str(exc), real=False)
     directory = Path(met_dir or "data/arl")
-    local_files = [download(item, directory) for item in choice.files]
+    local_files = [
+        download(item, directory, max_bytes=4 * 1024**3, deadline_seconds=900)
+        for item in choice.files
+    ]
     samples = _run_concentration(executable, converter, start, end, local_files)
     return _product(
         "",

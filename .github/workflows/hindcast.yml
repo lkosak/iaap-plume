@@ -4,9 +4,12 @@ on:
   schedule:
     # 15:10 and 21:10 UTC on 24–26 Nov (9:10 AM and 3:10 PM CT).
     # The command writes nothing until archived HRRR or NAM12 for the
-    # Nov 23 window is on the ARL server.
+    # November 25 event window is available.
     - cron: "10 15,21 24-26 11 *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/hindcast.yml, pipeline/arl.py, pipeline/hindcast.py]
 
 permissions:
   contents: write

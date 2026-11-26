@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from xml.etree import ElementTree
 from urllib.request import Request, urlopen
 
 # A 2-hour schedule cannot spend itself on multi-gigabyte ARL files.
@@ -236,6 +237,28 @@ def select_archive(names: list[str], need_start: datetime, need_end: datetime) -
         f"NAM12 missing {', '.join(missing) or 'none'}. "
         f"HRRR chunks listed: {len(hrrr_chunks)}."
     )
+
+
+def select_hindcast_archive(need_start: datetime, need_end: datetime) -> MetChoice:
+    """Prefer the date-specific NOAA cloud mirror and fall back to the ARL site."""
+    mirror = "https://noaa-oar-arl-hysplit-pds.s3.amazonaws.com"
+    keys = {}
+    day = need_start.astimezone(timezone.utc).date()
+    last = need_end.astimezone(timezone.utc).date()
+    try:
+        while day <= last:
+            prefix = f"hrrr/{day:%Y/%m/%Y%m%d}_"
+            listing = ElementTree.fromstring(_get(f"{mirror}/?list-type=2&prefix={prefix}"))
+            for item in listing.findall(".//{*}Key"):
+                if item.text:
+                    keys[item.text.rsplit("/", 1)[-1]] = item.text
+            day += timedelta(days=1)
+        choice = select_archive(list(keys), need_start, need_end)
+        choice.files = [replace(item, url=f"{mirror}/{keys[item.name]}") for item in choice.files]
+        return choice
+    except Exception as exc:
+        print(f"NOAA cloud HRRR archive: {exc}", flush=True)
+        return select_archive(list_archive_names(), need_start, need_end)
 
 
 def _parse_day(stamp: str) -> date:
